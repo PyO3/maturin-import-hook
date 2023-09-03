@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
-use indoc::indoc;
+use expect_test::expect;
 use time::macros::datetime;
 use which::which;
 
