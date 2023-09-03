@@ -142,9 +142,14 @@ for the modules directly in the project source tree.
 
 Starting from v0.12.4, the [Python maturin package](https://pypi.org/project/maturin/) provides
 a Python import hook to allow quickly build and load a Rust module into Python.
+This makes development much more convenient as it brings the workflow of
+developing Rust modules closer to the workflow of developing regular python modules.
 
 It supports importing editable-installed pure Rust and mixed Rust/Python project
 layouts as well as importing standalone `.rs` files.
+
+> **Note**: you must install maturin with the import-hook extra to be
+> able to use the import hook: `pip install maturin[import-hook]`
 
 ```python
 from maturin import import_hook
