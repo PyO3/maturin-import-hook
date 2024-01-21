@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import platform
 import shutil
@@ -8,17 +9,20 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import pytest
-
-from maturin.import_hook import MaturinSettings, reset_logger
-from maturin.import_hook._building import BuildCache, BuildStatus
-from maturin.import_hook._resolve_project import ProjectResolveError, _resolve_project
-from maturin.import_hook.project_importer import (
+from maturin_import_hook import MaturinSettings, reset_logger
+from maturin_import_hook._building import BuildCache, BuildStatus
+from maturin_import_hook._resolve_project import (
+    ProjectResolveError,
+    _resolve_project,
+    _TomlFile,
+)
+from maturin_import_hook.project_importer import (
     _get_installed_package_mtime,
     _get_project_mtime,
     _load_dist_info,
     _uri_to_path,
 )
-from maturin.import_hook.settings import MaturinBuildSettings, MaturinDevelopSettings
+from maturin_import_hook.settings import MaturinBuildSettings, MaturinDevelopSettings
 
 from .common import log, test_crates
 
@@ -313,6 +317,42 @@ def test_load_dist_info(tmp_path: Path) -> None:
     linked_path, is_editable = _load_dist_info(tmp_path, "package_foo", require_project_target=False)
     assert linked_path == path
     assert is_editable
+
+
+def test_toml_file_loading(tmp_path: Path) -> None:
+    toml_path = tmp_path / "my_file.toml"
+    toml_path.write_text('[foo]\nbar = 12\nbaz = ["a"]')
+    toml_file = _TomlFile.load(toml_path)
+    assert toml_file.path == toml_path
+    assert toml_file.data == {"foo": {"bar": 12, "baz": ["a"]}}
+
+
+def test_toml_file(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.INFO)
+
+    toml_file = _TomlFile(Path("/toml_path"), {"foo": {"bar": 12, "baz": ["a"]}})
+
+    with pytest.raises(AssertionError):
+        toml_file.get_value([], int)
+
+    assert toml_file.get_value(["foo"], dict) == {"bar": 12, "baz": ["a"]}
+    assert toml_file.get_value(["foo", "bar"], int) == 12
+    assert toml_file.get_value(["foo", "baz"], list) == ["a"]
+    assert toml_file.get_value(["foo", "xyz"], int) is None
+
+    assert caplog.messages == []
+
+    assert toml_file.get_value(["foo", "bar"], str) is None
+    assert caplog.messages == ["failed to get str value at 'foo.bar' from toml file: '/toml_path'"]
+    caplog.clear()
+
+    assert toml_file.get_value(["foo", "bar", "xyz"], int) is None
+    assert caplog.messages == ["failed to get int value at 'foo.bar.xyz' from toml file: '/toml_path'"]
+    caplog.clear()
+
+    assert toml_file.get_value(["foo", "baz", "xyz"], int) is None
+    assert caplog.messages == ["failed to get int value at 'foo.baz.xyz' from toml file: '/toml_path'"]
+    caplog.clear()
 
 
 def _optional_path_to_str(path: Optional[Path]) -> Optional[str]:

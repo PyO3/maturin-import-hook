@@ -1,22 +1,64 @@
 import itertools
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar
 
 from maturin_import_hook._logging import logger
 
 try:
     import tomllib
 except ModuleNotFoundError:
-    import tomli as tomllib  # type: ignore
+    import tomli as tomllib
+
+
+_T = TypeVar("_T")
+
+
+class _TomlFile:
+    def __init__(self, path: Path, data: Dict[Any, Any]) -> None:
+        self.path = path
+        self.data = data
+
+    @staticmethod
+    def load(path: Path) -> "_TomlFile":
+        with path.open("rb") as f:
+            data = tomllib.load(f)
+        return _TomlFile(path, data)
+
+    def get_value_or_default(self, keys: List[str], required_type: Type[_T], default: _T) -> _T:
+        value = self.get_value(keys, required_type)
+        return default if value is None else value
+
+    def get_value(self, keys: List[str], required_type: Type[_T]) -> Optional[_T]:
+        assert keys
+        current_data: Any = self.data
+        num_keys = len(keys)
+        parent_invalid = False
+        for i, key in enumerate(keys):
+            current_data = current_data.get(key)
+            if current_data is None:
+                return None
+            elif i < num_keys - 1 and not isinstance(current_data, dict):
+                parent_invalid = True
+                break
+
+        if parent_invalid or not isinstance(current_data, required_type):
+            logger.error(
+                "failed to get %s value at '%s' from toml file: '%s'",
+                required_type.__name__,
+                ".".join(keys),
+                self.path,
+            )
+            return None
+        else:
+            return current_data
 
 
 def find_cargo_manifest(project_dir: Path) -> Optional[Path]:
     pyproject_path = project_dir / "pyproject.toml"
     if pyproject_path.exists():
-        with pyproject_path.open("rb") as f:
-            pyproject = tomllib.load(f)
-        relative_manifest_path = pyproject.get("tool", {}).get("maturin", {}).get("manifest-path", None)
+        pyproject = _TomlFile.load(pyproject_path)
+        relative_manifest_path = pyproject.get_value(["tool", "maturin", "manifest-path"], str)
         if relative_manifest_path is not None:
             return project_dir / relative_manifest_path
 
@@ -100,8 +142,7 @@ def _find_all_path_dependencies(immediate_path_dependencies: List[Path]) -> List
         all_path_dependencies.add(dependency_project_dir)
         manifest_path = dependency_project_dir / "Cargo.toml"
         if manifest_path.exists():
-            with manifest_path.open("rb") as f:
-                cargo = tomllib.load(f)
+            cargo = _TomlFile.load(manifest_path)
             to_search.extend(_get_immediate_path_dependencies(dependency_project_dir, cargo))
     return sorted(all_path_dependencies)
 
@@ -119,15 +160,13 @@ def _resolve_project(project_dir: Path) -> MaturinProject:
     if not pyproject_path.exists():
         msg = "no pyproject.toml found"
         raise ProjectResolveError(msg)
-    with pyproject_path.open("rb") as f:
-        pyproject = tomllib.load(f)
+    pyproject = _TomlFile.load(pyproject_path)
 
     manifest_path = find_cargo_manifest(project_dir)
     if manifest_path is None:
         msg = "no Cargo.toml found"
         raise ProjectResolveError(msg)
-    with manifest_path.open("rb") as f:
-        cargo = tomllib.load(f)
+    cargo = _TomlFile.load(manifest_path)
 
     module_full_name = _resolve_module_name(pyproject, cargo)
     if module_full_name is None:
@@ -173,7 +212,7 @@ def _resolve_rust_module(python_dir: Path, module_name: str) -> Tuple[Path, Path
     return python_module, extension_module_dir, extension_module_name
 
 
-def _resolve_module_name(pyproject: Dict[str, Any], cargo: Dict[str, Any]) -> Optional[str]:
+def _resolve_module_name(pyproject: _TomlFile, cargo: _TomlFile) -> Optional[str]:
     """This follows the same logic as project_layout.rs (ProjectResolver::resolve).
 
     Precedence:
@@ -183,21 +222,21 @@ def _resolve_module_name(pyproject: Dict[str, Any], cargo: Dict[str, Any]) -> Op
      * Cargo.toml `package.name`
 
     """
-    module_name = pyproject.get("tool", {}).get("maturin", {}).get("module-name", None)
+    module_name = pyproject.get_value(["tool", "maturin", "module-name"], str)
     if module_name is not None:
         return module_name
-    module_name = cargo.get("lib", {}).get("name", None)
+    module_name = cargo.get_value(["lib", "name"], str)
     if module_name is not None:
         return module_name
-    module_name = pyproject.get("project", {}).get("name", None)
+    module_name = pyproject.get_value(["project", "name"], str)
     if module_name is not None:
         return module_name
-    return cargo.get("package", {}).get("name", None)
+    return cargo.get_value(["package", "name"], str)
 
 
-def _get_immediate_path_dependencies(manifest_dir_path: Path, cargo: Dict[str, Any]) -> List[Path]:
+def _get_immediate_path_dependencies(manifest_dir_path: Path, cargo: _TomlFile) -> List[Path]:
     path_dependencies = []
-    for dependency in cargo.get("dependencies", {}).values():
+    for dependency in cargo.get_value_or_default(["dependencies"], dict, {}).values():
         if isinstance(dependency, dict):
             relative_path = dependency.get("path", None)
             if relative_path is not None:
@@ -205,18 +244,18 @@ def _get_immediate_path_dependencies(manifest_dir_path: Path, cargo: Dict[str, A
     return path_dependencies
 
 
-def _resolve_py_root(project_dir: Path, pyproject: Dict[str, Any]) -> Path:
+def _resolve_py_root(project_dir: Path, pyproject: _TomlFile) -> Path:
     """This follows the same logic as project_layout.rs."""
-    py_root = pyproject.get("tool", {}).get("maturin", {}).get("python-source", None)
+    py_root = pyproject.get_value(["tool", "maturin", "python-source"], str)
     if py_root is not None:
         return project_dir / py_root
-    project_name = pyproject.get("project", {}).get("name", None)
+    project_name = pyproject.get_value(["project", "name"], str)
     if project_name is None:
         return project_dir
 
     rust_cargo_toml_found = (project_dir / "rust/Cargo.toml").exists()
 
-    python_packages = pyproject.get("tool", {}).get("maturin", {}).get("python-packages", [])
+    python_packages = pyproject.get_value_or_default(["tool", "maturin", "python-packages"], list, [])
 
     package_name = project_name.replace("-", "_")
     python_src_found = any(
