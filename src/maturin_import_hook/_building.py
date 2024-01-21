@@ -89,7 +89,9 @@ class LockedBuildCache:
 class BuildCache:
     def __init__(self, build_dir: Optional[Path], lock_timeout_seconds: Optional[float]) -> None:
         self._build_dir = build_dir if build_dir is not None else _get_default_build_dir()
-        self._lock = filelock.FileLock(self._build_dir / "lock", timeout=lock_timeout_seconds)
+        self._lock = filelock.FileLock(
+            self._build_dir / "lock", timeout=-1 if lock_timeout_seconds is None else lock_timeout_seconds
+        )
 
     @contextmanager
     def lock(self) -> Generator[LockedBuildCache, None, None]:

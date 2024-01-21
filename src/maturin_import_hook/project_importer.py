@@ -10,6 +10,7 @@ import sys
 import time
 import urllib.parse
 import urllib.request
+import importlib.machinery
 from importlib.machinery import ModuleSpec, PathFinder
 from pathlib import Path
 from types import ModuleType

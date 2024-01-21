@@ -1,10 +1,12 @@
 import os
-from pathlib import Path
-from typing import Optional, Set
+from typing import Optional, Set, TYPE_CHECKING
 
 from maturin_import_hook import project_importer, rust_file_importer
 from maturin_import_hook._logging import logger, reset_logger
-from maturin_import_hook.settings import MaturinSettings
+
+if TYPE_CHECKING:
+    from pathlib import Path
+    from maturin_import_hook.settings import MaturinSettings
 
 __all__ = ["install", "uninstall", "reset_logger"]
 
