@@ -12,7 +12,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Optional, Sequence, Tuple, Union
 
-from maturin.import_hook._building import (
+from maturin_import_hook._building import (
     BuildCache,
     BuildStatus,
     LockedBuildCache,
@@ -20,9 +20,9 @@ from maturin.import_hook._building import (
     maturin_output_has_warnings,
     run_maturin,
 )
-from maturin.import_hook._logging import logger
-from maturin.import_hook._resolve_project import ProjectResolver, find_cargo_manifest
-from maturin.import_hook.settings import MaturinSettings
+from maturin_import_hook._logging import logger
+from maturin_import_hook._resolve_project import ProjectResolver, find_cargo_manifest
+from maturin_import_hook.settings import MaturinSettings
 
 __all__ = ["MaturinRustFileImporter", "install", "uninstall", "IMPORTER"]
 

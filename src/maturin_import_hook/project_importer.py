@@ -15,20 +15,20 @@ from pathlib import Path
 from types import ModuleType
 from typing import Iterable, Optional, Sequence, Set, Tuple, Union, List
 
-from maturin.import_hook._building import (
+from maturin_import_hook._building import (
     BuildCache,
     BuildStatus,
     LockedBuildCache,
     develop_build_project,
     maturin_output_has_warnings,
 )
-from maturin.import_hook._logging import logger
-from maturin.import_hook._resolve_project import (
+from maturin_import_hook._logging import logger
+from maturin_import_hook._resolve_project import (
     MaturinProject,
     ProjectResolver,
     is_maybe_maturin_project,
 )
-from maturin.import_hook.settings import MaturinSettings
+from maturin_import_hook.settings import MaturinSettings
 
 __all__ = [
     "MaturinProjectImporter",

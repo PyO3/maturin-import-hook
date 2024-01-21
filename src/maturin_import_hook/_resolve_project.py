@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from maturin.import_hook._logging import logger
+from maturin_import_hook._logging import logger
 
 try:
     import tomllib

@@ -13,8 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Generator, List, Optional, Tuple
 
-from maturin.import_hook._logging import logger
-from maturin.import_hook.settings import MaturinSettings
+from maturin_import_hook._logging import logger
+from maturin_import_hook.settings import MaturinSettings
 
 try:
     import filelock
