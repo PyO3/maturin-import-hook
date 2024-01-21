@@ -1,13 +1,47 @@
 [project]
 name = "maturin-import-hook"
+description = "import hook to load rust projects built with maturin"
+authors = [
+    {name = "Matthew Broadway", email = "mattdbway@gmail.com"}
+]
+readme = "README.md"
 version = "0.1.0"
+requires-python = ">=3.7"
 dependencies = [
     "filelock"
 ]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Build Tools",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License"
+]
+
+[project.urls]
+Homepage = "https://github.com/PyO3/maturin-import-hook"
+# TODO(matt): should the import hook have its own documentation
+Documentation = "https://maturin.rs"
+Repository = "https://github.com/PyO3/maturin-import-hook.git"
+Issues = "https://github.com/PyO3/maturin-import-hook/issues"
+Changelog = "https://github.com/PyO3/maturin-import-hook/blob/main/Changelog.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.ruff]
+line-length = 120
+target-version = "py37"
+
+[tool.mypy]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+warn_no_return = true
+ignore_missing_imports = true
+
+
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
