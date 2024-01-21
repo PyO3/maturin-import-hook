@@ -1,5 +1,6 @@
 import contextlib
 import importlib.abc
+import importlib.machinery
 import itertools
 import json
 import logging
@@ -10,11 +11,10 @@ import sys
 import time
 import urllib.parse
 import urllib.request
-import importlib.machinery
 from importlib.machinery import ModuleSpec, PathFinder
 from pathlib import Path
 from types import ModuleType
-from typing import Iterable, Optional, Sequence, Set, Tuple, Union, List
+from typing import Iterable, List, Optional, Sequence, Set, Tuple, Union
 
 from maturin_import_hook._building import (
     BuildCache,
@@ -108,7 +108,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
                 logger.debug('found project linked by dist-info: "%s"', project_dir)
                 if not is_editable and not self._install_new_packages:
                     logger.debug(
-                        "package not installed in editable-mode " "and install_new_packages=False. not rebuilding"
+                        "package not installed in editable-mode and install_new_packages=False. not rebuilding"
                     )
                 else:
                     spec, rebuilt = self._rebuild_project(package_name, project_dir)
@@ -157,7 +157,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
 
         if not self._install_new_packages and not _is_editable_installed_package(project_dir, package_name):
             logger.debug(
-                'package "%s" is not already installed and ' "install_new_packages=False. Not importing",
+                'package "%s" is not already installed and install_new_packages=False. Not importing',
                 package_name,
             )
             return None, False
@@ -320,7 +320,7 @@ def _load_dist_info(
     if dist_info_path is None:
         return None, False
     try:
-        with open(dist_info_path / "direct_url.json") as f:
+        with (dist_info_path / "direct_url.json").open() as f:
             dist_info_data = json.load(f)
     except OSError:
         return None, False
@@ -342,9 +342,10 @@ def _load_dist_info(
 def _uri_to_path(uri: str) -> Path:
     """based on https://stackoverflow.com/a/61922504"""
     parsed = urllib.parse.urlparse(uri)
-    host = "{0}{0}{netloc}{0}".format(os.path.sep, netloc=parsed.netloc)
+    sep = os.path.sep
+    host = f"{sep}{sep}{parsed.netloc}{sep}"
     path = urllib.request.url2pathname(urllib.parse.unquote(parsed.path))
-    return Path(os.path.normpath(os.path.join(host, path)))
+    return Path(os.path.normpath(os.path.join(host, path)))  # noqa: PTH118
 
 
 def _find_installed_package_root(resolved: MaturinProject, package_spec: ModuleSpec) -> Optional[Path]:

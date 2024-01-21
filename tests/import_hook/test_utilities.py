@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import pytest
-from maturin_import_hook import MaturinSettings, reset_logger
+from maturin_import_hook import reset_logger
 from maturin_import_hook._building import BuildCache, BuildStatus
 from maturin_import_hook._resolve_project import (
     ProjectResolveError,
@@ -22,7 +22,7 @@ from maturin_import_hook.project_importer import (
     _load_dist_info,
     _uri_to_path,
 )
-from maturin_import_hook.settings import MaturinBuildSettings, MaturinDevelopSettings
+from maturin_import_hook.settings import MaturinBuildSettings, MaturinDevelopSettings, MaturinSettings
 
 from .common import log, test_crates
 
@@ -246,6 +246,7 @@ def _get_ground_truth_resolved_project(project_name: str) -> Dict[str, Any]:
     # passed in by the test runner
     resolved_packages_path = Path(os.environ["RESOLVED_PACKAGES_PATH"])
     resolved_data = json.loads(resolved_packages_path.read_text())
+    assert isinstance(resolved_data, dict)
     return resolved_data[project_name]
 
 
@@ -309,8 +310,8 @@ def test_load_dist_info(tmp_path: Path) -> None:
         uri = "file:///C:/some%20directory/foo"
         path = Path(r"C:\some directory\foo")
     else:
-        uri = "file:///tmp/some%20directory/foo"
-        path = Path("/tmp/some directory/foo")
+        uri = "file:///somewhere/some%20directory/foo"
+        path = Path("/somewhere/some directory/foo")
 
     (dist_info / "direct_url.json").write_text('{"dir_info": {"editable": true}, "url": "' + uri + '"}')
 

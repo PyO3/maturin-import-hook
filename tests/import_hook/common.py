@@ -1,6 +1,7 @@
 import itertools
 import multiprocessing
 import os
+import platform
 import re
 import shutil
 import site
@@ -8,12 +9,11 @@ import subprocess
 import sys
 import tempfile
 import time
-import platform
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Optional, Tuple, Callable, Any, Dict
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
-from maturin.import_hook.project_importer import _load_dist_info
+from maturin_import_hook.project_importer import _load_dist_info
 
 verbose = True
 
@@ -98,7 +98,8 @@ def run_python(
         if not expect_error:
             # re-raising the CalledProcessError would cause
             # unnecessary output since we are already printing it above
-            raise RuntimeError("run_python failed") from None
+            message = "run_python failed"
+            raise RuntimeError(message) from None
     duration = time.perf_counter() - start
 
     output = output.replace("\r\n", "\n")
@@ -154,7 +155,7 @@ def install_editable(project_dir: Path) -> None:
     log(f"installing {project_dir.name} in editable/unpacked mode")
     env = os.environ.copy()
     env["VIRTUAL_ENV"] = sys.exec_prefix
-    subprocess.check_call(["maturin", "develop"], cwd=project_dir, env=env)
+    subprocess.check_call(["maturin", "develop"], cwd=project_dir, env=env)  # noqa: S607
 
 
 def install_non_editable(project_dir: Path) -> None:
@@ -185,7 +186,10 @@ def is_editable_installed_correctly(project_name: str, project_dir: Path, is_mix
     log(f"checking if {project_name} is installed correctly.")
     installed_as_pth = _is_installed_as_pth(project_name)
     installed_editable_with_direct_url = _is_installed_editable_with_direct_url(project_name, project_dir)
-    log(f"{is_mixed=}, {installed_as_pth=} {installed_editable_with_direct_url=}")
+    log(
+        f"is_mixed={is_mixed}, installed_as_pth={installed_as_pth} "
+        f"installed_editable_with_direct_url={installed_editable_with_direct_url}"
+    )
 
     proc = subprocess.run(
         [sys.executable, "-m", "pip", "show", "--disable-pip-version-check", "-f", project_name],
@@ -208,7 +212,7 @@ def get_project_copy(project_dir: Path, output_path: Path) -> Path:
 
 def _get_relative_files_tracked_by_git(root: Path) -> Iterable[Path]:
     """This is used to ignore built artifacts to create a clean copy."""
-    output = subprocess.check_output(["git", "ls-tree", "--name-only", "-z", "-r", "HEAD"], cwd=root)
+    output = subprocess.check_output(["git", "ls-tree", "--name-only", "-z", "-r", "HEAD"], cwd=root)  # noqa: S607
     for relative_path_bytes in output.split(b"\x00"):
         relative_path = Path(os.fsdecode(relative_path_bytes))
         if (root / relative_path).is_file():
@@ -266,11 +270,9 @@ def run_concurrent_python(
 ) -> List[PythonProcessOutput]:
     outputs: List[PythonProcessOutput] = []
     with multiprocessing.Pool(processes=num) as pool:
-        processes = []
-        for i in range(num):
-            processes.append(pool.apply_async(func, kwds=args))
+        processes = [pool.apply_async(func, kwds=args) for _ in range(num)]
 
-        for i, proc in enumerate(processes):
+        for proc in processes:
             try:
                 output, duration = proc.get()
             except subprocess.CalledProcessError as e:

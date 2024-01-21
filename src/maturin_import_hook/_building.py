@@ -11,7 +11,7 @@ import zipfile
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Generator, List, Optional, Tuple
+from typing import Any, Dict, Generator, List, Optional, Tuple
 
 from maturin_import_hook._logging import logger
 from maturin_import_hook.settings import MaturinSettings
@@ -38,7 +38,7 @@ class BuildStatus:
     maturin_args: List[str]
     maturin_output: str
 
-    def to_json(self) -> dict:
+    def to_json(self) -> Dict[str, Any]:
         return {
             "build_mtime": self.build_mtime,
             "source_path": str(self.source_path),
@@ -47,7 +47,7 @@ class BuildStatus:
         }
 
     @staticmethod
-    def from_json(json_data: dict) -> Optional["BuildStatus"]:
+    def from_json(json_data: Dict[Any, Any]) -> Optional["BuildStatus"]:
         try:
             return BuildStatus(
                 build_mtime=json_data["build_mtime"],
@@ -110,12 +110,13 @@ def _acquire_lock(lock: filelock.FileLock) -> Generator[None, None, None]:
             with lock.acquire():
                 yield
     except filelock.Timeout:
-        raise TimeoutError(
+        message = (
             f'Acquiring lock "{lock.lock_file}" timed out after {lock.timeout} seconds. '
-            f"If the project is still compiling and needs more time you can increase the "
-            f"timeout using the lock_timeout_seconds argument to import_hook.install() "
-            f"(or set to None to wait indefinitely)"
-        ) from None
+            "If the project is still compiling and needs more time you can increase the "
+            "timeout using the lock_timeout_seconds argument to import_hook.install() "
+            "(or set to None to wait indefinitely)"
+        )
+        raise TimeoutError(message) from None
 
 
 def _get_default_build_dir() -> Path:
@@ -194,7 +195,7 @@ def run_maturin(args: List[str]) -> Tuple[bool, str]:
     logger.debug('using maturin at: "%s"', maturin_path)
 
     command = [maturin_path, *args]
-    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
     output = result.stdout.decode()
     if result.returncode != 0:
         logger.error(f'command "{subprocess.list2cmdline(command)}" returned non-zero exit status: {result.returncode}')

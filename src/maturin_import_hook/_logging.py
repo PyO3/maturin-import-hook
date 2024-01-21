@@ -11,9 +11,9 @@ class _LevelDependentFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         if record.levelno == logging.INFO:
-            self._style._fmt = self._info_fmt
+            self._style._fmt = self._info_fmt  # noqa: SLF001
         else:
-            self._style._fmt = self._other_fmt
+            self._style._fmt = self._other_fmt  # noqa: SLF001
         return super().format(record)
 
 

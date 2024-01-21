@@ -8,7 +8,8 @@ readme = "README.md"
 version = "0.1.0"
 requires-python = ">=3.7"
 dependencies = [
-    "filelock"
+    "filelock",
+    "tomli>=1.1.0 ; python_version<'3.11'"
 ]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
@@ -34,12 +35,35 @@ where = ["src"]
 [tool.ruff]
 line-length = 120
 target-version = "py37"
+select = ["ALL"]
+
+# https://docs.astral.sh/ruff/rules/
+ignore = [
+    "ANN101",  # missing-type-self
+    "ARG",     # flake8-unused-arguments
+    "C901",    # complex-structure
+    "COM",     # flake8-commas
+    "D",       # pydocstyle
+    "FA",      # flake8-future-annotations
+    "FBT",     # flake8-boolean-trap
+    "ISC001",  # single-line-implicit-string-concatenation  (disabled to avoid clashing with formatter)
+    "PLR0911", # too-many-return-statements
+    "PLR0912", # too-many-branches
+    "PLR0913", # too-many-arguments
+    "PLR0915", # too-many-statements
+    "PLR2004", # magic-value-comparison
+    "PLW0603", # global-statement
+    "RET505",  # superfluous-else-return
+    "S101",    # assert
+    "S324",    # hashlib-insecure-hash-function
+    "S603",    # subprocess-without-shell-equals-true
+    "T201",    # print
+]
 
 [tool.mypy]
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-warn_no_return = true
-ignore_missing_imports = true
+python_version = "3.7"
+strict = true
+allow_redefinition = true
 
 
 [build-system]
