@@ -1,0 +1,10 @@
+# Package Resolver #
+
+This is a small utility to use the internal maturin package resolving code to compare with the python implementation
+in the import hook.
+
+from this directory, run
+```
+cargo run -- ../maturin ../resolved.json
+```
+to update `resolved.json`

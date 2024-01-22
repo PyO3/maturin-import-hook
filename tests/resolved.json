@@ -1,0 +1,166 @@
+{
+  "commit": "9d9155956987351f2f5a4c51655f073a7d117f1c",
+  "crates": {
+    "cffi-mixed": {
+      "cargo_manifest_path": "Cargo.toml",
+      "extension_module_dir": "cffi_mixed",
+      "module_full_name": "cffi_mixed",
+      "python_dir": ".",
+      "python_module": "cffi_mixed"
+    },
+    "cffi-pure": {
+      "cargo_manifest_path": "Cargo.toml",
+      "extension_module_dir": null,
+      "module_full_name": "cffi_pure",
+      "python_dir": ".",
+      "python_module": null
+    },
+    "hello-world": {
+      "cargo_manifest_path": "Cargo.toml",
+      "extension_module_dir": null,
+      "module_full_name": "hello-world",
+      "python_dir": ".",
+      "python_module": null
+    },
+    "lib_with_disallowed_lib": {
+      "cargo_manifest_path": "Cargo.toml",
+      "extension_module_dir": null,
+      "module_full_name": "lib_with_disallowed_lib",
+      "python_dir": ".",
+      "python_module": null
+    },
+    "lib_with_path_dep": {
+      "cargo_manifest_path": "Cargo.toml",
+      "extension_module_dir": null,
+      "module_full_name": "lib_with_path_dep",
+      "python_dir": ".",
+      "python_module": null
+    },
+    "license-test": {
+      "cargo_manifest_path": "Cargo.toml",
+      "extension_module_dir": null,
+      "module_full_name": "license-test",
+      "python_dir": ".",
+      "python_module": null
+    },
+    "pyo3-ffi-pure": {
+      "cargo_manifest_path": "Cargo.toml",
+      "extension_module_dir": null,
+      "module_full_name": "pyo3_ffi_pure",
+      "python_dir": ".",
+      "python_module": null
+    },
+    "pyo3-mixed": {
+      "cargo_manifest_path": "Cargo.toml",
+      "extension_module_dir": "pyo3_mixed",
+      "module_full_name": "pyo3_mixed",
+      "python_dir": ".",
+      "python_module": "pyo3_mixed"
+    },
+    "pyo3-mixed-implicit": {
+      "cargo_manifest_path": "Cargo.toml",
+      "extension_module_dir": "python/pyo3_mixed_implicit/some_rust",
+      "module_full_name": "pyo3_mixed_implicit.some_rust.rust",
+      "python_dir": "python",
+      "python_module": "python/pyo3_mixed_implicit"
+    },
+    "pyo3-mixed-include-exclude": {
+      "cargo_manifest_path": "Cargo.toml",
+      "extension_module_dir": "pyo3_mixed_include_exclude",
+      "module_full_name": "pyo3_mixed_include_exclude",
+      "python_dir": ".",
+      "python_module": "pyo3_mixed_include_exclude"
+    },
+    "pyo3-mixed-py-subdir": {
+      "cargo_manifest_path": "Cargo.toml",
+      "extension_module_dir": "python/pyo3_mixed_py_subdir",
+      "module_full_name": "pyo3_mixed_py_subdir._pyo3_mixed",
+      "python_dir": "python",
+      "python_module": "python/pyo3_mixed_py_subdir"
+    },
+    "pyo3-mixed-src": {
+      "cargo_manifest_path": "rust/Cargo.toml",
+      "extension_module_dir": "src/pyo3_mixed_src",
+      "module_full_name": "pyo3_mixed_src",
+      "python_dir": "src",
+      "python_module": "src/pyo3_mixed_src"
+    },
+    "pyo3-mixed-submodule": {
+      "cargo_manifest_path": "Cargo.toml",
+      "extension_module_dir": "pyo3_mixed_submodule/rust_module",
+      "module_full_name": "pyo3_mixed_submodule.rust_module.rust",
+      "python_dir": ".",
+      "python_module": "pyo3_mixed_submodule"
+    },
+    "pyo3-mixed-with-path-dep": {
+      "cargo_manifest_path": "Cargo.toml",
+      "extension_module_dir": "pyo3_mixed_with_path_dep",
+      "module_full_name": "pyo3_mixed_with_path_dep",
+      "python_dir": ".",
+      "python_module": "pyo3_mixed_with_path_dep"
+    },
+    "pyo3-mixed-workspace": {
+      "cargo_manifest_path": "rust/python/pyo3-mixed-workspace-py/Cargo.toml",
+      "extension_module_dir": "src/pyo3_mixed_workspace",
+      "module_full_name": "pyo3_mixed_workspace.pyo3_mixed_workspace_py",
+      "python_dir": "src",
+      "python_module": "src/pyo3_mixed_workspace"
+    },
+    "pyo3-pure": {
+      "cargo_manifest_path": "Cargo.toml",
+      "extension_module_dir": null,
+      "module_full_name": "pyo3_pure",
+      "python_dir": ".",
+      "python_module": null
+    },
+    "sdist_with_path_dep": {
+      "cargo_manifest_path": "Cargo.toml",
+      "extension_module_dir": null,
+      "module_full_name": "sdist_with_path_dep",
+      "python_dir": ".",
+      "python_module": null
+    },
+    "sdist_with_target_path_dep": {
+      "cargo_manifest_path": "Cargo.toml",
+      "extension_module_dir": null,
+      "module_full_name": "sdist_with_target_path_dep",
+      "python_dir": ".",
+      "python_module": null
+    },
+    "uniffi-mixed": {
+      "cargo_manifest_path": "Cargo.toml",
+      "extension_module_dir": "uniffi_mixed",
+      "module_full_name": "uniffi_mixed",
+      "python_dir": ".",
+      "python_module": "uniffi_mixed"
+    },
+    "uniffi-pure": {
+      "cargo_manifest_path": "Cargo.toml",
+      "extension_module_dir": null,
+      "module_full_name": "uniffi_pure",
+      "python_dir": ".",
+      "python_module": null
+    },
+    "uniffi-pure-proc-macro": {
+      "cargo_manifest_path": "Cargo.toml",
+      "extension_module_dir": null,
+      "module_full_name": "uniffi_pure_proc_macro",
+      "python_dir": ".",
+      "python_module": null
+    },
+    "with-data": {
+      "cargo_manifest_path": "Cargo.toml",
+      "extension_module_dir": null,
+      "module_full_name": "with_data",
+      "python_dir": ".",
+      "python_module": null
+    },
+    "wrong-python-source": {
+      "cargo_manifest_path": "Cargo.toml",
+      "extension_module_dir": null,
+      "module_full_name": "wrong-python-source",
+      "python_dir": "python",
+      "python_module": null
+    }
+  }
+}
