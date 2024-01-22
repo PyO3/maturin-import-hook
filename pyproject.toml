@@ -65,6 +65,9 @@ python_version = "3.7"
 strict = true
 allow_redefinition = true
 
+[tool.pytest.ini_options]
+addopts = "--ignore tests/maturin --capture=no -v"
+testpaths = ["tests"]
 
 [build-system]
 requires = ["setuptools", "wheel"]

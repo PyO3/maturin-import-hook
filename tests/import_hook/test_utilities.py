@@ -1,22 +1,13 @@
-import json
 import logging
-import os
 import platform
-import shutil
 import time
-from operator import itemgetter
 from pathlib import Path
-from typing import Any, Dict, List, Optional
 
 import pytest
-from maturin_import_hook import reset_logger
-from maturin_import_hook._building import BuildCache, BuildStatus
-from maturin_import_hook._resolve_project import (
-    ProjectResolveError,
-    _resolve_project,
-    _TomlFile,
-)
+from maturin_import_hook._resolve_project import ProjectResolveError, _resolve_project, _TomlFile
 from maturin_import_hook.project_importer import (
+    BuildCache,
+    BuildStatus,
     _get_installed_package_mtime,
     _get_project_mtime,
     _load_dist_info,
@@ -24,24 +15,18 @@ from maturin_import_hook.project_importer import (
 )
 from maturin_import_hook.settings import MaturinBuildSettings, MaturinDevelopSettings, MaturinSettings
 
-from .common import log, test_crates
+from .common import TEST_CRATES_DIR, ResolvedPackage, map_optional, resolved_package_names, resolved_packages
 
-# set this to be able to run these tests without going through run.rs each time
-SAVED_RESOLVED_PACKAGES_PATH: Optional[Path] = None
-
-if SAVED_RESOLVED_PACKAGES_PATH is not None:
-    if "RESOLVED_PACKAGES_PATH" in os.environ:
-        shutil.copy(os.environ["RESOLVED_PACKAGES_PATH"], SAVED_RESOLVED_PACKAGES_PATH)
-    os.environ["RESOLVED_PACKAGES_PATH"] = str(SAVED_RESOLVED_PACKAGES_PATH)
-
-
-reset_logger()
+log = logging.getLogger(__name__)
 
 
 def test_settings() -> None:
     assert MaturinSettings().to_args() == []
+    assert MaturinSettings().supported_commands() == {"build", "develop"}
     assert MaturinBuildSettings().to_args() == []
+    assert MaturinBuildSettings().supported_commands() == {"build"}
     assert MaturinDevelopSettings().to_args() == []
+    assert MaturinDevelopSettings().supported_commands() == {"develop"}
 
     settings = MaturinSettings(
         release=True,
@@ -235,42 +220,33 @@ class TestGetProjectMtime:
         assert project_mtime == (project_dir / "source").stat().st_mtime
 
 
-def _get_ground_truth_resolved_project_names() -> List[str]:
-    # passed in by the test runner
-    resolved_packages_path = Path(os.environ["RESOLVED_PACKAGES_PATH"])
-    resolved_data = json.loads(resolved_packages_path.read_text())
-    return sorted(resolved_data.keys(), key=itemgetter(0))
-
-
-def _get_ground_truth_resolved_project(project_name: str) -> Dict[str, Any]:
-    # passed in by the test runner
-    resolved_packages_path = Path(os.environ["RESOLVED_PACKAGES_PATH"])
-    resolved_data = json.loads(resolved_packages_path.read_text())
-    assert isinstance(resolved_data, dict)
-    return resolved_data[project_name]
-
-
-@pytest.mark.parametrize("project_name", _get_ground_truth_resolved_project_names())
+@pytest.mark.parametrize("project_name", resolved_package_names())
 def test_resolve_project(project_name: str) -> None:
-    ground_truth = _get_ground_truth_resolved_project(project_name)
+    ground_truth = resolved_packages()[project_name]
 
-    log("ground truth:")
-    log(json.dumps(ground_truth, indent=2, sort_keys=True))
+    log.info("ground truth:")
+    log.info(map_optional(ground_truth, lambda x: x.to_json()))
+
+    project_dir = TEST_CRATES_DIR / project_name
 
     try:
-        resolved = _resolve_project(test_crates / project_name)
+        resolved = _resolve_project(project_dir)
     except ProjectResolveError:
         calculated = None
     else:
-        calculated = {
-            "cargo_manifest_path": _optional_path_to_str(resolved.cargo_manifest_path),
-            "python_dir": _optional_path_to_str(resolved.python_dir),
-            "python_module": _optional_path_to_str(resolved.python_module),
-            "extension_module_dir": _optional_path_to_str(resolved.extension_module_dir),
-            "module_full_name": resolved.module_full_name,
-        }
-    log("calculated:")
-    log(json.dumps(calculated, indent=2, sort_keys=True))
+
+        def _relative_path_str(path: Path) -> str:
+            return str(path.relative_to(project_dir))
+
+        calculated = ResolvedPackage(
+            cargo_manifest_path=_relative_path_str(resolved.cargo_manifest_path),
+            python_dir=_relative_path_str(resolved.python_dir),
+            python_module=map_optional(resolved.python_module, _relative_path_str),
+            extension_module_dir=map_optional(resolved.extension_module_dir, _relative_path_str),
+            module_full_name=resolved.module_full_name,
+        )
+    log.info("calculated:")
+    log.info(map_optional(calculated, lambda x: x.to_json()))
 
     assert ground_truth == calculated
 
@@ -354,10 +330,6 @@ def test_toml_file(caplog: pytest.LogCaptureFixture) -> None:
     assert toml_file.get_value(["foo", "baz", "xyz"], int) is None
     assert caplog.messages == ["failed to get int value at 'foo.baz.xyz' from toml file: '/toml_path'"]
     caplog.clear()
-
-
-def _optional_path_to_str(path: Optional[Path]) -> Optional[str]:
-    return str(path) if path is not None else None
 
 
 def _small_sleep() -> None:
