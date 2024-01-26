@@ -3,26 +3,26 @@ import logging
 
 logging.basicConfig(format="%(name)s [%(levelname)s] %(message)s", level=logging.DEBUG)
 
-from maturin import import_hook
+import maturin_import_hook
 
-import_hook.reset_logger()
-import_hook.install()
+maturin_import_hook.reset_logger()
+maturin_import_hook.install()
 
 from .packages import my_py_module
 
 assert my_py_module.do_something_py(1, 2) == 3
 
-from .packages import my_rust_module
+from .packages import my_rust_module  # type: ignore[missing-import]
 
 assert my_rust_module.do_something(1, 2) == 3
 
-from .packages import my_rust_module
+from .packages import my_rust_module  # type: ignore[missing-import]
 
 assert my_rust_module.do_something(1, 2) == 3
 
 
 # modules with the same name do not clash
-from .packages.subpackage import my_rust_module as other_module
+from .packages.subpackage import my_rust_module as other_module  # type: ignore[missing-import]
 
 assert other_module.get_num() == 42
 

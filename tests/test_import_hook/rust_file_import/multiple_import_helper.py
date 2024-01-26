@@ -4,10 +4,10 @@ import logging
 logging.basicConfig(format="%(name)s [%(levelname)s] %(message)s", level=logging.DEBUG)
 logging.getLogger("maturin.import_hook").setLevel(logging.DEBUG)
 
-from maturin import import_hook
+import maturin_import_hook
 
-import_hook.reset_logger()
-import_hook.install()
+maturin_import_hook.reset_logger()
+maturin_import_hook.install()
 
 import packages.subpackage.my_rust_module
 

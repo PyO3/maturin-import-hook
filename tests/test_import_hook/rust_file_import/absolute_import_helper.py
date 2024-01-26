@@ -3,10 +3,10 @@ import logging
 
 logging.basicConfig(format="%(name)s [%(levelname)s] %(message)s", level=logging.DEBUG)
 
-from maturin import import_hook
+import maturin_import_hook
 
-import_hook.reset_logger()
-import_hook.install()
+maturin_import_hook.reset_logger()
+maturin_import_hook.install()
 
 import packages.my_py_module
 
@@ -16,7 +16,7 @@ import packages.my_rust_module
 
 assert packages.my_rust_module.do_something(1, 2) == 3
 
-from packages import my_rust_module
+from packages import my_rust_module  # type: ignore[missing-import]
 
 assert my_rust_module.do_something(1, 2) == 3
 

@@ -1,4 +1,4 @@
-from .subpackage import my_rust_module
+from .subpackage import my_rust_module  # type: ignore[missing-import]
 
 
 def foo() -> int:
