@@ -19,7 +19,7 @@ else:
 maturin_import_hook.install(settings=settings)
 
 
-from my_script import get_num  # type: ignore[missing-import]
+from my_project import get_num  # type: ignore[missing-import]
 
 print(f"get_num = {get_num()}")
 print("SUCCESS")
