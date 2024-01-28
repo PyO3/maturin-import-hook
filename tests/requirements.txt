@@ -1,5 +1,6 @@
 -e ..
 pytest
+junit2html
 uniffi-bindgen==0.25.0
 cffi
 

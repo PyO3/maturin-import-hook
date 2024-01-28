@@ -17,8 +17,6 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar
 script_dir = Path(__file__).resolve().parent
 log = logging.getLogger(__name__)
 
-VERBOSE = True
-
 # the CI does not have enough space to keep the outputs.
 # When running locally you may set this to False for debugging
 CLEAR_WORKSPACE = False
@@ -110,6 +108,7 @@ def run_python(
     python_path: Optional[List[Path]] = None,
     quiet: bool = False,
     expect_error: bool = False,
+    profile: Optional[Path] = None,
 ) -> Tuple[str, float]:
     start = time.perf_counter()
 
@@ -119,7 +118,11 @@ def run_python(
     else:
         env["PYTHONPATH"] = str(MATURIN_DIR)
 
-    cmd = [sys.executable, *args]
+    cmd = [sys.executable]
+    if profile is not None:
+        cmd += ["-m", "cProfile", "-o", str(profile.resolve())]
+    cmd.extend(args)
+    log.info("running python")
     try:
         proc = subprocess.run(
             cmd,
@@ -132,7 +135,7 @@ def run_python(
         output = proc.stdout.decode()
     except subprocess.CalledProcessError as e:
         output = e.stdout.decode()
-        if VERBOSE and not quiet and not expect_error:
+        if not quiet and not expect_error:
             message = "\n".join([
                 "-" * 40,
                 "Called Process Error:",
@@ -151,7 +154,7 @@ def run_python(
 
     output = output.replace("\r\n", "\n")
 
-    if VERBOSE and not quiet:
+    if not quiet:
         log.info("-" * 40)
         log.info("subprocess output")
         log.info(subprocess.list2cmdline(cmd))
