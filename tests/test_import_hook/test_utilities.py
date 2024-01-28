@@ -15,7 +15,7 @@ from maturin_import_hook.project_importer import (
 )
 from maturin_import_hook.settings import MaturinBuildSettings, MaturinDevelopSettings, MaturinSettings
 
-from .common import TEST_CRATES_DIR, ResolvedPackage, map_optional, resolved_package_names, resolved_packages
+from .common import TEST_CRATES_DIR, ResolvedPackage, map_optional, resolved_packages
 
 log = logging.getLogger(__name__)
 
@@ -220,7 +220,7 @@ class TestGetProjectMtime:
         assert project_mtime == (project_dir / "source").stat().st_mtime
 
 
-@pytest.mark.parametrize("project_name", resolved_package_names())
+@pytest.mark.parametrize("project_name", sorted(resolved_packages().keys()))
 def test_resolve_project(project_name: str) -> None:
     ground_truth = resolved_packages()[project_name]
 

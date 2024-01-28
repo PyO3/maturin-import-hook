@@ -68,6 +68,11 @@ allow_redefinition = true
 [tool.pytest.ini_options]
 addopts = "--ignore tests/maturin --capture=no -v"
 testpaths = ["tests"]
+junit_logging = "all"
+junit_log_passing_tests = true
+# total includes setup and teardown
+junit_duration_report = "total"
+junit_family = "xunit2"
 
 [build-system]
 requires = ["setuptools", "wheel"]

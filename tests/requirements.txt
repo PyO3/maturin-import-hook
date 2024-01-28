@@ -1,0 +1,7 @@
+-e ..
+pytest
+uniffi-bindgen==0.25.0
+cffi
+
+# required for pyo3-mixed
+boltons

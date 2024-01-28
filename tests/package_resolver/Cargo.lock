@@ -248,15 +248,15 @@ dependencies = [
  "rustls-pemfile",
  "tracing-subscriber",
  "ureq",
- "which",
+ "which 5.0.0",
  "xwin",
 ]
 
 [[package]]
 name = "cargo-zigbuild"
-version = "0.18.2"
+version = "0.18.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2361848eb9cd8264dc51e7d31011bb25dee6c2d98a029037cd8402adf49ff91"
+checksum = "cb76e6ab558f9138291c7e1fa954ffd58e060712eab13f97a317da712218ca24"
 dependencies = [
  "anyhow",
  "cargo-options",
@@ -271,7 +271,7 @@ dependencies = [
  "serde_json",
  "shlex",
  "target-lexicon",
- "which",
+ "which 6.0.0",
 ]
 
 [[package]]
@@ -2144,6 +2144,19 @@ dependencies = [
  "once_cell",
  "rustix",
  "windows-sys 0.48.0",
+]
+
+[[package]]
+name = "which"
+version = "6.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7fa5e0c10bf77f44aac573e498d1a82d5fbd5e91f6fc0a99e7be4b38e85e101c"
+dependencies = [
+ "either",
+ "home",
+ "once_cell",
+ "rustix",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

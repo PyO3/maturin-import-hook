@@ -1,6 +1,6 @@
 import logging
 
-logger = logging.getLogger("maturin.import_hook")
+logger = logging.getLogger("maturin_import_hook")
 
 
 class _LevelDependentFormatter(logging.Formatter):
