@@ -181,6 +181,11 @@ class TestLogging:
         py_path = Path(shutil.copy(helpers_dir / "logging_helper.py", package_path / "loader.py"))
         return rs_path, py_path
 
+    def test_missing_maturin(self, workspace: Path) -> None:
+        rs_path, py_path = self._create_clean_package(workspace / "package")
+        output, _ = run_python([str(py_path), "CLEAR_PATH"], workspace)
+        assert output == 'building "my_script"\ncaught ImportError: maturin not found in the PATH\n'
+
     def test_default_rebuild(self, workspace: Path) -> None:
         """By default, when a module is out of date the import hook logs messages
         before and after rebuilding but hides the underlying details.

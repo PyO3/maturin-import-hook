@@ -507,6 +507,11 @@ class TestLogging:
 
         return project_dir
 
+    def test_missing_maturin(self, workspace: Path) -> None:
+        self._create_clean_project(workspace, True)
+        output, _ = run_python_code(self._loader_script(), args=["CLEAR_PATH"])
+        assert output == 'building "test_project"\ncaught ImportError: maturin not found in the PATH\n'
+
     @pytest.mark.parametrize("is_mixed", [False, True])
     def test_default_rebuild(self, workspace: Path, is_mixed: bool) -> None:
         """By default, when a module is out of date the import hook logs messages

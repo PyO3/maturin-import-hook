@@ -1,3 +1,4 @@
+import os
 import sys
 
 import maturin_import_hook
@@ -8,8 +9,14 @@ if False:  # enable for debugging but it will cause the tests to fail since they
     logging.basicConfig(format="%(name)s [%(levelname)s] %(message)s", level=logging.DEBUG)
     maturin_import_hook.reset_logger()
 
-if len(sys.argv) > 1 and sys.argv[1] == "RESET_LOGGER":
-    maturin_import_hook.reset_logger()
+if len(sys.argv) > 1:
+    arg = sys.argv[1]
+    if arg == "RESET_LOGGER":
+        maturin_import_hook.reset_logger()
+    elif arg == "CLEAR_PATH":
+        os.environ["PATH"] = ""
+    else:
+        raise ValueError(arg)
 
 maturin_import_hook.install()
 
