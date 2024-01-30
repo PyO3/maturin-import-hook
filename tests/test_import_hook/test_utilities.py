@@ -4,10 +4,9 @@ import time
 from pathlib import Path
 
 import pytest
+from maturin_import_hook._building import BuildCache, BuildStatus
 from maturin_import_hook._resolve_project import _ProjectResolveError, _resolve_project, _TomlFile
 from maturin_import_hook.project_importer import (
-    BuildCache,
-    BuildStatus,
     _get_installed_package_mtime,
     _get_project_mtime,
     _load_dist_info,

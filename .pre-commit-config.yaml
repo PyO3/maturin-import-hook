@@ -18,8 +18,7 @@ repos:
     hooks:
       # note: mypy runs in an isolated environment and so has no access to third party packages
       - id: mypy
-        # TODO(matt): enable type checking of tests as well
-        entry: mypy src/maturin_import_hook/
+        entry: mypy src/maturin_import_hook/ tests/test_import_hook tests/runner.py
         pass_filenames: false
         additional_dependencies: ["pytest"]
   - repo: https://github.com/codespell-project/codespell

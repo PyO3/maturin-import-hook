@@ -64,6 +64,11 @@ ignore = [
 python_version = "3.8"
 strict = true
 allow_redefinition = true
+exclude = [
+    "tests/maturin",
+    "tests/test_import_hook/file_importer_helpers",
+    "tests/test_import_hook/project_importer_helpers"
+]
 
 [tool.pytest.ini_options]
 addopts = "--ignore tests/maturin --capture=no -v"
