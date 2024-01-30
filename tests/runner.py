@@ -49,8 +49,8 @@ def _create_test_venv(python: Path, venv_dir: Path) -> None:
     if proc.returncode != 0:
         log.error(proc.stdout)
         log.error(proc.stderr)
-        message = "pip install failed"
-        raise RuntimeError(message)
+        msg = "pip install failed"
+        raise RuntimeError(msg)
     log.info("test environment ready")
 
 

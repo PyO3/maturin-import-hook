@@ -148,8 +148,8 @@ def run_python(
         if not expect_error:
             # re-raising the CalledProcessError would cause
             # unnecessary output since we are already printing it above
-            message = "run_python failed"
-            raise RuntimeError(message) from None
+            msg = "run_python failed"
+            raise RuntimeError(msg) from None
     duration = time.perf_counter() - start
 
     output = output.replace("\r\n", "\n")
