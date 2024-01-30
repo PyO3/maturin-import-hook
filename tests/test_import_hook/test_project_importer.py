@@ -507,10 +507,24 @@ class TestLogging:
 
         return project_dir
 
-    def test_missing_maturin(self, workspace: Path) -> None:
+    def test_maturin_detection(self, workspace: Path) -> None:
         self._create_clean_project(workspace, True)
-        output, _ = run_python_code(self._loader_script(), args=["CLEAR_PATH"])
-        assert output == 'building "test_project"\ncaught ImportError: maturin not found in the PATH\n'
+
+        output, _ = run_python_code(self._loader_script(), env={"PATH": ""})
+        assert output == "building \"test_project\"\ncaught MaturinError('maturin not found')\n"
+
+        extra_bin = workspace / "bin"
+        extra_bin.mkdir()
+        mock_maturin_path = extra_bin / "maturin"
+        mock_maturin_path.write_text('#!/usr/bin/env bash\necho "maturin 0.1.2"')
+        mock_maturin_path.chmod(0o777)
+
+        output, _ = run_python_code(self._loader_script(), env={"PATH": f"{extra_bin}:/usr/bin"})
+        assert output == (
+            'building "test_project"\n'
+            "caught MaturinError('unsupported maturin version: (0, 1, 2). "
+            "Import hook requires >=(1, 4, 0),<(2, 0, 0)')\n"
+        )
 
     @pytest.mark.parametrize("is_mixed", [False, True])
     def test_default_rebuild(self, workspace: Path, is_mixed: bool) -> None:

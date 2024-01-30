@@ -181,10 +181,24 @@ class TestLogging:
         py_path = Path(shutil.copy(helpers_dir / "logging_helper.py", package_path / "loader.py"))
         return rs_path, py_path
 
-    def test_missing_maturin(self, workspace: Path) -> None:
+    def test_maturin_detection(self, workspace: Path) -> None:
         rs_path, py_path = self._create_clean_package(workspace / "package")
-        output, _ = run_python([str(py_path), "CLEAR_PATH"], workspace)
-        assert output == 'building "my_script"\ncaught ImportError: maturin not found in the PATH\n'
+
+        output, _ = run_python([str(py_path)], workspace, env={"PATH": ""})
+        assert output == "building \"my_script\"\ncaught MaturinError('maturin not found')\n"
+
+        extra_bin = workspace / "bin"
+        extra_bin.mkdir()
+        mock_maturin_path = extra_bin / "maturin"
+        mock_maturin_path.write_text('#!/usr/bin/env bash\necho "maturin 0.1.2"')
+        mock_maturin_path.chmod(0o777)
+
+        output, _ = run_python([str(py_path)], workspace, env={"PATH": f"{extra_bin}:/usr/bin"})
+        assert output == (
+            'building "my_script"\n'
+            "caught MaturinError('unsupported maturin version: (0, 1, 2). "
+            "Import hook requires >=(1, 4, 0),<(2, 0, 0)')\n"
+        )
 
     def test_default_rebuild(self, workspace: Path) -> None:
         """By default, when a module is out of date the import hook logs messages
@@ -220,7 +234,7 @@ class TestLogging:
             ".*"
             "maturin failed"
             ".*"
-            "caught ImportError: Failed to build wheel with maturin\n"
+            "caught MaturinError\\('Failed to build wheel with maturin'\\)\n"
         )
         check_match(output, pattern, flags=re.MULTILINE | re.DOTALL)
 
@@ -274,6 +288,6 @@ class TestLogging:
         pattern = (
             'building "my_script"\n'
             'rebuilt and loaded module "my_script" in [0-9.]+s\n'
-            f"caught ImportError: {missing_entrypoint_error_message_pattern('my_script')}\n"
+            f"caught ImportError\\('{missing_entrypoint_error_message_pattern('my_script')}'\\)\n"
         )
         check_match(output, pattern, flags=re.MULTILINE)

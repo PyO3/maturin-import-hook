@@ -1,4 +1,3 @@
-import os
 import sys
 
 import maturin_import_hook
@@ -13,8 +12,6 @@ if len(sys.argv) > 1:
     arg = sys.argv[1]
     if arg == "RESET_LOGGER":
         maturin_import_hook.reset_logger()
-    elif arg == "CLEAR_PATH":
-        os.environ["PATH"] = ""
     else:
         raise ValueError(arg)
 
@@ -24,7 +21,7 @@ try:
     import my_script  # type: ignore[missing-import]
 except ImportError as e:
     # catch instead of printing the traceback since that may depend on the interpreter
-    print(f"caught ImportError: {e}")
+    print(f"caught {e!r}")
 else:
     print("get_num", my_script.get_num())
     print("SUCCESS")

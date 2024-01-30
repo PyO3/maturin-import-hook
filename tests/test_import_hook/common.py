@@ -1,9 +1,7 @@
 import dataclasses
-import itertools
 import json
 import logging
 import multiprocessing
-import os
 import platform
 import re
 import subprocess
@@ -105,18 +103,12 @@ def run_python(
     args: List[str],
     cwd: Path,
     *,
-    python_path: Optional[List[Path]] = None,
     quiet: bool = False,
     expect_error: bool = False,
     profile: Optional[Path] = None,
+    env: Optional[Dict[str, Any]] = None,
 ) -> Tuple[str, float]:
     start = time.perf_counter()
-
-    env = os.environ
-    if python_path is not None:
-        env["PYTHONPATH"] = os.pathsep.join(str(p) for p in itertools.chain(python_path, [MATURIN_DIR]))
-    else:
-        env["PYTHONPATH"] = str(MATURIN_DIR)
 
     cmd = [sys.executable]
     if profile is not None:
@@ -169,9 +161,9 @@ def run_python_code(
     *,
     args: Optional[List[str]] = None,
     cwd: Optional[Path] = None,
-    python_path: Optional[List[Path]] = None,
     quiet: bool = False,
     expect_error: bool = False,
+    env: Optional[Dict[str, Any]] = None,
 ) -> Tuple[str, float]:
     with tempfile.TemporaryDirectory("run_python_code") as tmpdir_str:
         tmpdir = Path(tmpdir_str)
@@ -185,9 +177,9 @@ def run_python_code(
         return run_python(
             python_args,
             cwd=cwd or tmpdir,
-            python_path=python_path,
             quiet=quiet,
             expect_error=expect_error,
+            env=env,
         )
 
 

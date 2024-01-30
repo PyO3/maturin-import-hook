@@ -19,11 +19,13 @@ from maturin_import_hook._building import (
     BuildStatus,
     LockedBuildCache,
     build_unpacked_wheel,
+    find_maturin,
     maturin_output_has_warnings,
     run_maturin,
 )
 from maturin_import_hook._logging import logger
 from maturin_import_hook._resolve_project import ProjectResolver, find_cargo_manifest
+from maturin_import_hook.error import ImportHookError
 from maturin_import_hook.settings import MaturinSettings
 
 __all__ = ["MaturinRustFileImporter", "install", "uninstall", "IMPORTER"]
@@ -46,13 +48,20 @@ class MaturinRustFileImporter(importlib.abc.MetaPathFinder):
         self._settings = settings
         self._build_cache = BuildCache(build_dir, lock_timeout_seconds)
         self._show_warnings = show_warnings
+        self._maturin_path: Optional[Path] = None
 
     def get_settings(self, module_path: str, source_path: Path) -> MaturinSettings:
         """This method can be overridden in subclasses to customize settings for specific projects."""
         return self._settings if self._settings is not None else MaturinSettings.default()
 
-    @staticmethod
+    def find_maturin(self) -> Path:
+        """this method can be overridden to specify an alternative maturin binary to use"""
+        if self._maturin_path is None:
+            self._maturin_path = find_maturin((1, 4, 0), (2, 0, 0))
+        return self._maturin_path
+
     def generate_project_for_single_rust_file(
+        self,
         module_path: str,
         project_dir: Path,
         rust_file: Path,
@@ -62,10 +71,10 @@ class MaturinRustFileImporter(importlib.abc.MetaPathFinder):
         if project_dir.exists():
             shutil.rmtree(project_dir)
 
-        success, output = run_maturin(["new", "--bindings", "pyo3", str(project_dir)])
+        success, output = run_maturin(self.find_maturin(), ["new", "--bindings", "pyo3", str(project_dir)])
         if not success:
             msg = "Failed to generate project for rust file"
-            raise ImportError(msg)
+            raise ImportHookError(msg)
 
         if settings.features is not None:
             available_features = [feature for feature in settings.features if "/" not in feature]
@@ -148,9 +157,9 @@ class MaturinRustFileImporter(importlib.abc.MetaPathFinder):
             manifest_path = find_cargo_manifest(project_dir)
             if manifest_path is None:
                 msg = f"cargo manifest not found in the project generated for {file_path}"
-                raise ImportError(msg)
+                raise ImportHookError(msg)
 
-            maturin_output = build_unpacked_wheel(manifest_path, dist_dir, settings)
+            maturin_output = build_unpacked_wheel(self.find_maturin(), manifest_path, dist_dir, settings)
             logger.debug(
                 'compiled "%s" in %.3fs',
                 file_path,
@@ -237,7 +246,7 @@ def _find_extension_module(dir_path: Path, module_name: str, *, require: bool = 
             return extension_path
     if require:
         msg = f'could not find module "{module_name}" in "{dir_path}"'
-        raise ImportError(msg)
+        raise ImportHookError(msg)
     return None
 
 

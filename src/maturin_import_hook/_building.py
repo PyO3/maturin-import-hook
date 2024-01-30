@@ -13,17 +13,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional, Tuple
 
-from maturin_import_hook._logging import logger
-from maturin_import_hook.settings import MaturinSettings
+import filelock
 
-try:
-    import filelock
-except ImportError:
-    msg = (
-        "could not find 'filelock' package. "
-        "Try installing maturin with the import-hook extra: pip install maturin[import-hook]"
-    )
-    raise ImportError(msg) from None
+from maturin_import_hook._logging import logger
+from maturin_import_hook.error import ImportHookError, MaturinError
+from maturin_import_hook.settings import MaturinSettings
 
 
 @dataclass
@@ -116,7 +110,7 @@ def _acquire_lock(lock: filelock.FileLock) -> Generator[None, None, None]:
             "timeout using the lock_timeout_seconds argument to import_hook.install() "
             "(or set to None to wait indefinitely)"
         )
-        raise TimeoutError(message) from None
+        raise ImportHookError(message) from None
 
 
 def _get_default_build_dir() -> Path:
@@ -148,14 +142,16 @@ def _get_cache_dir() -> Path:
 
 
 def build_wheel(
+    maturin_path: Path,
     manifest_path: Path,
     output_dir: Path,
     settings: MaturinSettings,
 ) -> str:
     if "build" not in settings.supported_commands():
         msg = f'provided {type(settings).__name__} does not support the "build" command'
-        raise ImportError(msg)
+        raise ImportHookError(msg)
     success, output = run_maturin(
+        maturin_path,
         [
             "build",
             "--manifest-path",
@@ -169,32 +165,58 @@ def build_wheel(
     )
     if not success:
         msg = "Failed to build wheel with maturin"
-        raise ImportError(msg)
+        raise MaturinError(msg)
     return output
 
 
 def develop_build_project(
+    maturin_path: Path,
     manifest_path: Path,
     settings: MaturinSettings,
 ) -> str:
     if "develop" not in settings.supported_commands():
         msg = f'provided {type(settings).__name__} does not support the "develop" command'
-        raise ImportError(msg)
-    success, output = run_maturin(["develop", "--manifest-path", str(manifest_path), *settings.to_args()])
+        raise ImportHookError(msg)
+    success, output = run_maturin(maturin_path, ["develop", "--manifest-path", str(manifest_path), *settings.to_args()])
     if not success:
         msg = "Failed to build package with maturin"
-        raise ImportError(msg)
+        raise MaturinError(msg)
     return output
 
 
-def run_maturin(args: List[str]) -> Tuple[bool, str]:
-    maturin_path = shutil.which("maturin")
-    if maturin_path is None:
-        msg = "maturin not found in the PATH"
-        raise ImportError(msg)
-    logger.debug('using maturin at: "%s"', maturin_path)
+def find_maturin(lower_version: Tuple[int, int, int], upper_version: Tuple[int, int, int]) -> Path:
+    logger.debug("searching for maturin")
+    maturin_path_str = shutil.which("maturin")
+    if maturin_path_str is None:
+        msg = "maturin not found"
+        raise MaturinError(msg)
+    maturin_path = Path(maturin_path_str)
+    logger.debug('found maturin at: "%s"', maturin_path)
+    version = get_maturin_version(maturin_path)
+    if lower_version <= version < upper_version:
+        logger.debug('maturin at: "%s" has version %s which is compatible with the import hook', maturin_path, version)
+        return maturin_path
+    else:
+        msg = f"unsupported maturin version: {version}. Import hook requires >={lower_version},<{upper_version}"
+        raise MaturinError(msg)
 
-    command = [maturin_path, *args]
+
+def get_maturin_version(maturin_path: Path) -> Tuple[int, int, int]:
+    success, output = run_maturin(maturin_path, ["--version"])
+    if not success:
+        msg = f'running "{maturin_path} --version" failed'
+        raise MaturinError(msg)
+    match = re.fullmatch(r"maturin ([0-9]+)\.([0-9]+)\.([0-9]+)\n", output)
+    if match is None:
+        msg = f'unexpected version string: "{output}"'
+        raise MaturinError(msg)
+    return int(match.group(1)), int(match.group(2)), int(match.group(3))
+
+
+def run_maturin(maturin_path: Path, args: List[str]) -> Tuple[bool, str]:
+    command = [str(maturin_path), *args]
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("running command: %s", subprocess.list2cmdline(command))
     result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
     output = result.stdout.decode()
     if result.returncode != 0:
@@ -210,14 +232,14 @@ def run_maturin(args: List[str]) -> Tuple[bool, str]:
     return True, output
 
 
-def build_unpacked_wheel(manifest_path: Path, output_dir: Path, settings: MaturinSettings) -> str:
+def build_unpacked_wheel(maturin_path: Path, manifest_path: Path, output_dir: Path, settings: MaturinSettings) -> str:
     if output_dir.exists():
         shutil.rmtree(output_dir)
-    output = build_wheel(manifest_path, output_dir, settings)
+    output = build_wheel(maturin_path, manifest_path, output_dir, settings)
     wheel_path = _find_single_file(output_dir, ".whl")
     if wheel_path is None:
         msg = "failed to generate wheel"
-        raise ImportError(msg)
+        raise MaturinError(msg)
     with zipfile.ZipFile(wheel_path, "r") as f:
         f.extractall(output_dir)
     return output

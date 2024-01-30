@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 
 import pytest
-from maturin_import_hook._resolve_project import ProjectResolveError, _resolve_project, _TomlFile
+from maturin_import_hook._resolve_project import _ProjectResolveError, _resolve_project, _TomlFile
 from maturin_import_hook.project_importer import (
     BuildCache,
     BuildStatus,
@@ -231,7 +231,7 @@ def test_resolve_project(project_name: str) -> None:
 
     try:
         resolved = _resolve_project(project_dir)
-    except ProjectResolveError:
+    except _ProjectResolveError:
         calculated = None
     else:
 

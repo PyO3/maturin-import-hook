@@ -85,7 +85,7 @@ class ProjectResolver:
             resolved = None
             try:
                 resolved = _resolve_project(project_dir)
-            except ProjectResolveError as e:
+            except _ProjectResolveError as e:
                 logger.info('failed to resolve project "%s": %s', project_dir, e)
             self._resolved_project_cache[project_dir] = resolved
         else:
@@ -147,7 +147,7 @@ def _find_all_path_dependencies(immediate_path_dependencies: List[Path]) -> List
     return sorted(all_path_dependencies)
 
 
-class ProjectResolveError(Exception):
+class _ProjectResolveError(Exception):
     pass
 
 
@@ -159,19 +159,19 @@ def _resolve_project(project_dir: Path) -> MaturinProject:
     pyproject_path = project_dir / "pyproject.toml"
     if not pyproject_path.exists():
         msg = "no pyproject.toml found"
-        raise ProjectResolveError(msg)
+        raise _ProjectResolveError(msg)
     pyproject = _TomlFile.load(pyproject_path)
 
     manifest_path = find_cargo_manifest(project_dir)
     if manifest_path is None:
         msg = "no Cargo.toml found"
-        raise ProjectResolveError(msg)
+        raise _ProjectResolveError(msg)
     cargo = _TomlFile.load(manifest_path)
 
     module_full_name = _resolve_module_name(pyproject, cargo)
     if module_full_name is None:
         msg = "could not resolve module_full_name"
-        raise ProjectResolveError(msg)
+        raise _ProjectResolveError(msg)
 
     python_dir = _resolve_py_root(project_dir, pyproject)
 

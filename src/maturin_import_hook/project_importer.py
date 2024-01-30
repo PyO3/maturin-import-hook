@@ -21,6 +21,7 @@ from maturin_import_hook._building import (
     BuildStatus,
     LockedBuildCache,
     develop_build_project,
+    find_maturin,
     maturin_output_has_warnings,
 )
 from maturin_import_hook._logging import logger
@@ -29,6 +30,7 @@ from maturin_import_hook._resolve_project import (
     ProjectResolver,
     is_maybe_maturin_project,
 )
+from maturin_import_hook.error import ImportHookError
 from maturin_import_hook.settings import MaturinSettings
 
 __all__ = [
@@ -72,10 +74,17 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
         self._force_rebuild = force_rebuild
         self._show_warnings = show_warnings
         self._excluded_dir_names = DEFAULT_EXCLUDED_DIR_NAMES if excluded_dir_names is None else excluded_dir_names
+        self._maturin_path: Optional[Path] = None
 
     def get_settings(self, module_path: str, source_path: Path) -> MaturinSettings:
         """This method can be overridden in subclasses to customize settings for specific projects."""
         return self._settings if self._settings is not None else MaturinSettings.default()
+
+    def find_maturin(self) -> Path:
+        """this method can be overridden to specify an alternative maturin binary to use"""
+        if self._maturin_path is None:
+            self._maturin_path = find_maturin((1, 4, 0), (2, 0, 0))
+        return self._maturin_path
 
     def find_spec(
         self,
@@ -175,7 +184,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
 
             logger.info('building "%s"', package_name)
             start = time.perf_counter()
-            maturin_output = develop_build_project(resolved.cargo_manifest_path, settings)
+            maturin_output = develop_build_project(self.find_maturin(), resolved.cargo_manifest_path, settings)
             logger.debug(
                 'compiled project "%s" in %.3fs',
                 package_name,
@@ -188,7 +197,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
             spec = _find_spec_for_package(package_name)
             if spec is None:
                 msg = f'cannot find package "{package_name}" after installation'
-                raise ImportError(msg)
+                raise ImportHookError(msg)
 
             installed_package_root = _find_installed_package_root(resolved, spec)
             if installed_package_root is None:
@@ -448,7 +457,7 @@ def _find_extension_module(dir_path: Path, module_name: str, *, require: bool = 
             return extension_path
     if require:
         msg = f'could not find module "{module_name}" in "{dir_path}"'
-        raise ImportError(msg)
+        raise ImportHookError(msg)
     return None
 
 
