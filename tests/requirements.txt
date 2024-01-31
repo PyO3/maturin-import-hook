@@ -1,7 +1,8 @@
 -e ..
+maturin==1.4.0
 pytest
 junit2html
-uniffi-bindgen==0.25.0
+uniffi-bindgen==0.26.0
 cffi
 
 # required for pyo3-mixed

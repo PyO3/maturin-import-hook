@@ -1,5 +1,7 @@
+import hashlib
 import logging
 import platform
+import subprocess
 import time
 from pathlib import Path
 
@@ -17,6 +19,16 @@ from maturin_import_hook.settings import MaturinBuildSettings, MaturinDevelopSet
 from .common import TEST_CRATES_DIR, ResolvedPackage, map_optional, resolved_packages
 
 log = logging.getLogger(__name__)
+
+
+def test_maturin_unchanged() -> None:
+    """if new options have been added to maturin then the import hook needs to be updated to match"""
+
+    build_help = subprocess.check_output(["maturin", "build", "--help"])
+    assert hashlib.sha1(build_help).hexdigest() == "f3ea5264a77e621d3e7e31afd80d96b51cc74154"
+
+    develop_help = subprocess.check_output(["maturin", "develop", "--help"])
+    assert hashlib.sha1(develop_help).hexdigest() == "30aed063dbaf2816ac474fa0aebb444bf326aa6b"
 
 
 def test_settings() -> None:

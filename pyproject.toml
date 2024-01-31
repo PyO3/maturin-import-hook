@@ -57,6 +57,7 @@ ignore = [
     "S101",    # assert
     "S324",    # hashlib-insecure-hash-function
     "S603",    # subprocess-without-shell-equals-true
+    "S607",    # start-process-with-partial-path
     "T201",    # print
 ]
 
