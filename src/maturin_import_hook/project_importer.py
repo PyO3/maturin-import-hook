@@ -22,6 +22,7 @@ from maturin_import_hook._building import (
     LockedBuildCache,
     develop_build_project,
     find_maturin,
+    fix_direct_url,
     maturin_output_has_warnings,
 )
 from maturin_import_hook._logging import logger
@@ -185,6 +186,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
             logger.info('building "%s"', package_name)
             start = time.perf_counter()
             maturin_output = develop_build_project(self.find_maturin(), resolved.cargo_manifest_path, settings)
+            fix_direct_url(project_dir, package_name)
             logger.debug(
                 'compiled project "%s" in %.3fs',
                 package_name,

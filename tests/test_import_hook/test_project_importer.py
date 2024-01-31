@@ -10,6 +10,7 @@ from textwrap import dedent
 from typing import Iterator
 
 import pytest
+from maturin_import_hook._building import fix_direct_url
 from maturin_import_hook.project_importer import _load_dist_info
 
 from .common import (
@@ -653,7 +654,9 @@ def _install_editable(project_dir: Path) -> None:
     log.info("installing %s in editable/unpacked mode", project_dir.name)
     env = os.environ.copy()
     env["VIRTUAL_ENV"] = sys.exec_prefix
-    subprocess.check_call(["maturin", "develop"], cwd=project_dir, env=env)  # noqa: S607
+    subprocess.check_call(["maturin", "develop"], cwd=project_dir, env=env)
+    # TODO(matt): remove once maturin develop creates editable installs
+    fix_direct_url(project_dir, with_underscores(project_dir.name))
 
 
 def _install_non_editable(project_dir: Path) -> None:
@@ -712,7 +715,7 @@ def _get_project_copy(project_dir: Path, output_path: Path) -> Path:
 
 def _get_relative_files_tracked_by_git(root: Path) -> Iterator[Path]:
     """This is used to ignore built artifacts to create a clean copy."""
-    output = subprocess.check_output(["git", "ls-tree", "--name-only", "-z", "-r", "HEAD"], cwd=root)  # noqa: S607
+    output = subprocess.check_output(["git", "ls-tree", "--name-only", "-z", "-r", "HEAD"], cwd=root)
     for relative_path_bytes in output.split(b"\x00"):
         relative_path = Path(os.fsdecode(relative_path_bytes))
         if (root / relative_path).is_file():

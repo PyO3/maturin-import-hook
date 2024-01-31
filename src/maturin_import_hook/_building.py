@@ -5,6 +5,7 @@ import os
 import platform
 import re
 import shutil
+import site
 import subprocess
 import sys
 import zipfile
@@ -182,6 +183,34 @@ def develop_build_project(
         msg = "Failed to build package with maturin"
         raise MaturinError(msg)
     return output
+
+
+# TODO(matt): remove once a maturin release can create editable installs and raise minimum supported version
+def fix_direct_url(project_dir: Path, package_name: str) -> None:
+    """Seemingly due to a bug, installing with `pip install -e` will write the correct entry into `direct_url.json` to
+    point at the project directory, but calling `maturin develop` does not currently write this value correctly.
+    """
+    logger.debug("fixing direct_url for %s", package_name)
+    for path in site.getsitepackages():
+        dist_info = next(Path(path).glob(f"{package_name}-*.dist-info"), None)
+        if dist_info is None:
+            continue
+        direct_url_path = dist_info / "direct_url.json"
+        try:
+            with direct_url_path.open() as f:
+                direct_url = json.load(f)
+        except OSError:
+            continue
+        url = project_dir.as_uri()
+        if direct_url.get("url") != url:
+            logger.debug("fixing direct_url.json for package %s", package_name)
+            logger.debug('"%s" -> "%s"', direct_url.get("url"), url)
+            direct_url = {"dir_info": {"editable": True}, "url": url}
+            try:
+                with direct_url_path.open("w") as f:
+                    json.dump(direct_url, f)
+            except OSError:
+                return
 
 
 def find_maturin(lower_version: Tuple[int, int, int], upper_version: Tuple[int, int, int]) -> Path:

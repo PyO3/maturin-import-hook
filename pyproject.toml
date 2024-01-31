@@ -46,6 +46,7 @@ ignore = [
     "D",       # pydocstyle
     "FA",      # flake8-future-annotations
     "FBT",     # flake8-boolean-trap
+    "FIX",     # flake8-fixme
     "ISC001",  # single-line-implicit-string-concatenation  (disabled to avoid clashing with formatter)
     "PLR0911", # too-many-return-statements
     "PLR0912", # too-many-branches
@@ -59,6 +60,7 @@ ignore = [
     "S603",    # subprocess-without-shell-equals-true
     "S607",    # start-process-with-partial-path
     "T201",    # print
+    "TD003",   # missing-todo-link
 ]
 
 [tool.mypy]
