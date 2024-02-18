@@ -1,4 +1,5 @@
 import contextlib
+import importlib
 import importlib.abc
 import importlib.machinery
 import itertools
@@ -8,10 +9,11 @@ import math
 import os
 import site
 import sys
+import tempfile
 import time
 import urllib.parse
 import urllib.request
-from importlib.machinery import ModuleSpec, PathFinder
+from importlib.machinery import ExtensionFileLoader, ModuleSpec, PathFinder
 from pathlib import Path
 from types import ModuleType
 from typing import Iterable, List, Optional, Sequence, Set, Tuple, Union
@@ -64,6 +66,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
         build_dir: Optional[Path] = None,
         lock_timeout_seconds: Optional[float] = 120,
         install_new_packages: bool = True,
+        enable_reloading: bool = True,
         force_rebuild: bool = False,
         excluded_dir_names: Optional[Set[str]] = None,
         show_warnings: bool = True,
@@ -71,11 +74,13 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
         self._resolver = ProjectResolver()
         self._settings = settings
         self._build_cache = BuildCache(build_dir, lock_timeout_seconds)
+        self._enable_reloading = enable_reloading
         self._install_new_packages = install_new_packages
         self._force_rebuild = force_rebuild
         self._show_warnings = show_warnings
         self._excluded_dir_names = DEFAULT_EXCLUDED_DIR_NAMES if excluded_dir_names is None else excluded_dir_names
         self._maturin_path: Optional[Path] = None
+        self._reload_tmp_path: Optional[Path] = None
 
     def get_settings(self, module_path: str, source_path: Path) -> MaturinSettings:
         """This method can be overridden in subclasses to customize settings for specific projects."""
@@ -93,22 +98,30 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
         path: Optional[Sequence[Union[str, bytes]]] = None,
         target: Optional[ModuleType] = None,
     ) -> Optional[ModuleSpec]:
-        if fullname in sys.modules:
-            return None
-
         is_top_level_import = path is None
         if not is_top_level_import:
             return None
         assert "." not in fullname
         package_name = fullname
 
+        already_loaded = package_name in sys.modules
+        if already_loaded and not self._enable_reloading:
+            # there would be no point triggering a rebuild in this case because even after being rebuilt, the extension
+            # module would not automatically be reloaded and manually calling reload() on the extension module has
+            # no effect as reloading extension modules (without the hack that enable_reloading=True uses) is not
+            # possible (see docs/reloading.md)
+            logger.debug('package "%s" is already loaded and enable_reloading=False', package_name)
+            return None
+
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                '%s searching for "%s"%s', type(self).__name__, package_name, " (reload)" if already_loaded else ""
+            )
+
         start = time.perf_counter()
 
         # sys.path includes site-packages and search roots for editable installed packages
         search_paths = [Path(p) for p in sys.path]
-
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug('%s searching for "%s"', type(self).__name__, package_name)
 
         spec = None
         rebuilt = False
@@ -137,12 +150,59 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
                     break
 
         if spec is not None:
+            if already_loaded and self._enable_reloading:
+                assert spec is not None
+                spec = self._handle_reload(package_name, spec)
             duration = time.perf_counter() - start
             if rebuilt:
                 logger.info('rebuilt and loaded package "%s" in %.3fs', package_name, duration)
             else:
                 logger.debug('loaded package "%s" in %.3fs', package_name, duration)
         return spec
+
+    def _handle_reload(self, package_name: str, spec: ModuleSpec) -> ModuleSpec:
+        """trick python into reloading the extension module by symlinking the project
+
+        see docs/reloading.md for full details
+        """
+        debug_enabled = logger.isEnabledFor(logging.DEBUG)
+        if debug_enabled:
+            logger.debug('handling reload of "%s"', package_name)
+
+        if self._reload_tmp_path is None:
+            self._reload_tmp_path = Path(tempfile.mkdtemp(prefix="MaturinProjectImporter"))
+
+        if spec.origin is None:
+            logger.error("module spec has no origin. cannot reload")
+            return spec
+        origin = Path(spec.origin)
+        if origin.name != "__init__.py":
+            logger.error('unexpected package origin: "%s". Not reloading', origin)
+            return spec
+
+        this_reload_dir = Path(tempfile.mkdtemp(prefix=package_name, dir=self._reload_tmp_path))
+        (this_reload_dir / package_name).symlink_to(origin.parent)
+        if debug_enabled:
+            logger.debug("package reload symlink: %s", this_reload_dir)
+
+        path_finder = PathFinder()
+        reloaded_spec = path_finder.find_spec(package_name, path=[str(this_reload_dir)])
+        if reloaded_spec is None:
+            logger.error('failed to find package during reload "%s"', package_name)
+            return spec
+
+        name_prefix = f"{package_name}."
+        to_unload = sorted(
+            name
+            for name, module in sys.modules.items()
+            if name.startswith(name_prefix) and isinstance(module.__loader__, ExtensionFileLoader)
+        )
+        if debug_enabled:
+            logger.debug("unloading %s modules: %s", len(to_unload), to_unload)
+        for name in to_unload:
+            del sys.modules[name]
+
+        return reloaded_spec
 
     def _rebuild_project(
         self,
@@ -485,6 +545,7 @@ def install(
     settings: Optional[MaturinSettings] = None,
     build_dir: Optional[Path] = None,
     install_new_packages: bool = True,
+    enable_reloading: bool = True,
     force_rebuild: bool = False,
     excluded_dir_names: Optional[Set[str]] = None,
     lock_timeout_seconds: Optional[float] = 120,
@@ -500,6 +561,8 @@ def install(
 
     :param install_new_packages: whether to install detected packages using the import hook even if they
         are not already installed into the virtual environment or are installed in non-editable mode.
+
+    :param enable_reloading: enable workarounds to allow the extension modules to be reloaded with `importlib.reload()`
 
     :param force_rebuild: whether to always rebuild and skip checking whether anything has changed
 
@@ -520,6 +583,7 @@ def install(
         settings=settings,
         build_dir=build_dir,
         install_new_packages=install_new_packages,
+        enable_reloading=enable_reloading,
         force_rebuild=force_rebuild,
         excluded_dir_names=excluded_dir_names,
         lock_timeout_seconds=lock_timeout_seconds,

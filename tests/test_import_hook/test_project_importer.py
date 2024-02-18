@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 from textwrap import dedent
-from typing import Iterator
+from typing import Iterator, Optional, Tuple
 
 import pytest
 from maturin_import_hook._building import fix_direct_url
@@ -142,7 +142,7 @@ def test_do_not_rebuild_if_installed_non_editable(workspace: Path, project_name:
 
     check_installed_dir = project_dir / "check_installed"
     check_installed_path = check_installed_dir / "check_installed.py"
-    header = dedent("""
+    header = dedent("""\
     import sys
     import logging
     logging.basicConfig(format='%(name)s [%(levelname)s] %(message)s', level=logging.DEBUG)
@@ -486,6 +486,388 @@ def test_rebuild_on_settings_change(workspace: Path, is_mixed: bool) -> None:
     assert 'package up to date: "my_project"' in output4
     assert "get_num = 100" in output4
     assert "SUCCESS" in output4
+
+
+class TestReload:
+    """test that importlib.reload() can be used to reload modules imported by the import hook
+
+    The tests are organised to strike a balance between having many tests for individual behaviours and bundling
+    checks together to reduce the time spent compiling.
+    """
+
+    @staticmethod
+    def _create_reload_project(output_dir: Path, mixed: bool) -> Tuple[Path, Path]:
+        project_dir = _create_project_from_blank_template("my-project", output_dir / "my-project", mixed=mixed)
+        if mixed:
+            init = dedent("""\
+            import logging
+            from .my_project import *
+            logging.info('my_project __init__ initialised')
+            """)
+            (project_dir / "my_project/__init__.py").write_text(init)
+
+            submodule = dedent("""\
+            from . import my_project
+            from .my_project import get_num
+            import logging
+
+            submodule_data = {"foo": 123}
+
+            try:
+                submodule_data_init_once
+            except NameError:
+                submodule_data_init_once = {"foo": 123}
+
+            submodule_data_str = 'hi'
+
+            def get_twice_num_direct():
+                return get_num() * 2
+
+            def get_twice_num_indirect():
+                return my_project.get_num() * 2
+
+            logging.info('my_project submodule initialised')
+            """)
+            (project_dir / "my_project/submodule.py").write_text(submodule)
+
+        lib_path = project_dir / "src/lib.rs"
+        shutil.copy(helpers_dir / "reload_template.rs", lib_path)
+        _install_editable(project_dir)
+        return project_dir, lib_path
+
+    @pytest.mark.parametrize("is_mixed", [False, True])
+    def test_basic_reload(self, workspace: Path, is_mixed: bool) -> None:
+        """test several properties of reloading maturin packages with the import hook active
+
+        - import styles
+            - `import ...` style import
+                - top level
+                - extension module
+            - `from ... import ...` style import
+                - top level
+                - extension module
+            - duplicate reference to module
+        - package styles
+            - pure rust
+            - mixed python/rust
+        - module initialisation
+            - top level module
+            - extension module
+        - classes
+            - types becoming incompatible after reloading
+        - calling reload
+            - on the top level module
+                - after making changes
+                - after no changes
+            - on the extension module
+                - after making changes (intentionally does nothing)
+        """
+        _uninstall("my-project")
+        _project_dir, lib_path = self._create_reload_project(workspace, is_mixed)
+
+        output, _ = run_python(
+            [str(helpers_dir / "reload_helper.py"), str(lib_path), "_test_basic_reload"], cwd=workspace
+        )
+        info = "\n".join(line for line in output.splitlines() if "[INFO]" in line)
+
+        assert "SUCCESS" in output
+
+        e = re.escape
+
+        # This checks that the INFO level logs are exactly these messages (with nothing in between).
+        # This verifies that rebuilds and module initialisation are behaving as expected
+        expected_info_parts = [
+            e("reload_helper [INFO] initial import start"),
+            e('maturin_import_hook [INFO] building "my_project"'),  # because: no build status
+            'maturin_import_hook \\[INFO\\] rebuilt and loaded package "my_project" in [0-9.]+s',
+            e("root [INFO] my_project extension module initialised"),
+            e("root [INFO] my_project __init__ initialised" if is_mixed else ""),
+            e("reload_helper [INFO] initial import finish"),
+            e("root [INFO] comparing Integer instances a and b"),
+            e("root [INFO] comparing Integer instances a and c"),
+            e("reload_helper [INFO] modifying project"),
+            e("reload_helper [INFO] reload 1 start"),
+            e('maturin_import_hook [INFO] building "my_project"'),
+            'maturin_import_hook \\[INFO\\] rebuilt and loaded package "my_project" in [0-9.]+s',
+            e("root [INFO] my_project extension module initialised"),
+            e("root [INFO] my_project __init__ initialised" if is_mixed else ""),
+            e("reload_helper [INFO] reload 1 finish"),
+            e("root [INFO] comparing Integer instances d and e"),
+            e("reload_helper [INFO] reload 2 start"),
+            e("root [INFO] my_project __init__ initialised" if is_mixed else ""),
+            e("reload_helper [INFO] reload 2 finish"),
+            e("reload_helper [INFO] modifying project"),
+            e("reload_helper [INFO] reload 3 start"),
+            e('maturin_import_hook [INFO] building "my_project"'),
+            'maturin_import_hook \\[INFO\\] rebuilt and loaded package "my_project" in [0-9.]+s',
+            e("root [INFO] my_project extension module initialised"),
+            e("root [INFO] my_project __init__ initialised" if is_mixed else ""),
+            e("reload_helper [INFO] reload 3 finish"),
+            e("reload_helper [INFO] reload 4 start"),
+            e("reload_helper [INFO] reload 4 finish"),
+            e("reload_helper [INFO] SUCCESS"),
+        ]
+        expected_info_pattern = "\n".join(line for line in expected_info_parts if line)
+        check_match(info, expected_info_pattern, flags=re.MULTILINE)
+
+        # these checks ensure that the internals of the import hook are performing the expected actions
+        initial_import = _get_string_between(output, "initial import start", "initial import finish")
+        assert initial_import is not None
+        assert 'MaturinProjectImporter searching for "my_project"' in initial_import
+        assert 'building "my_project"' in initial_import
+
+        assert 'handling reload of "my_project"' not in initial_import
+
+        reload_1 = _get_string_between(output, "reload 1 start", "reload 1 finish")
+        assert reload_1 is not None
+        assert 'MaturinProjectImporter searching for "my_project" (reload)' in reload_1
+        assert 'building "my_project"' in reload_1
+        assert 'handling reload of "my_project"' in reload_1
+        assert "unloading 1 modules: ['my_project.my_project']" in reload_1
+
+        assert 'package up to date: "my_project"' not in reload_1
+
+        reload_2 = _get_string_between(output, "reload 2 start", "reload 2 finish")
+        assert reload_2 is not None
+        assert 'MaturinProjectImporter searching for "my_project" (reload)' in reload_2
+        assert 'package up to date: "my_project"' in reload_2
+        assert 'handling reload of "my_project"' in reload_2
+        assert "unloading 1 modules: ['my_project.my_project']" in reload_2
+
+        assert 'building "my_project"' not in reload_2
+
+        reload_3 = _get_string_between(output, "reload 3 start", "reload 3 finish")
+        assert reload_3 is not None
+        assert 'MaturinProjectImporter searching for "my_project" (reload)' in reload_3
+        assert 'building "my_project"' in reload_3
+        assert 'handling reload of "my_project"' in reload_3
+        assert "unloading 1 modules: ['my_project.my_project']" in reload_3
+
+        assert 'package up to date: "my_project"' not in reload_3
+
+        reload_4 = _get_string_between(output, "reload 4 start", "reload 4 finish")
+        assert reload_4 is not None
+        assert 'MaturinProjectImporter searching for "my_project"' not in reload_4
+
+    def test_globals(self, workspace: Path) -> None:
+        """tests properties of global variables initialised in python and rust modules when the package is reloaded
+
+        - module types:
+            - root module
+            - extension module
+            - python submodule
+        - properties tested
+            - __path__
+            - adding new global
+            - global initialised once
+            - modifying mutable global
+            - assigning to immutable global
+        - reload without changes
+        - reload with changes changes
+
+        """
+        _uninstall("my-project")
+        _project_dir, lib_path = self._create_reload_project(workspace, mixed=True)
+
+        output, _ = run_python([str(helpers_dir / "reload_helper.py"), str(lib_path), "_test_globals"], cwd=workspace)
+        info = "\n".join(line for line in output.splitlines() if "[INFO]" in line)
+
+        assert "SUCCESS" in output
+
+        e = re.escape
+
+        expected_info_parts = [
+            e("reload_helper [INFO] initial import start"),
+            e('maturin_import_hook [INFO] building "my_project"'),
+            'maturin_import_hook \\[INFO\\] rebuilt and loaded package "my_project" in [0-9.]+s',
+            e("root [INFO] my_project extension module initialised"),
+            e("root [INFO] my_project __init__ initialised"),
+            e("root [INFO] my_project submodule initialised"),
+            e("reload_helper [INFO] initial import finish"),
+            e("reload_helper [INFO] checking extension module"),
+            e("reload_helper [INFO] checking root module"),
+            e("reload_helper [INFO] checking submodule"),
+            e("reload_helper [INFO] reload 1 start"),
+            e("root [INFO] my_project __init__ initialised"),
+            e("reload_helper [INFO] reload 2 finish"),
+            e("reload_helper [INFO] checking extension module"),
+            e("reload_helper [INFO] checking root module"),
+            e("reload_helper [INFO] checking submodule"),
+            e("reload_helper [INFO] modifying project"),
+            e("reload_helper [INFO] reload 2 start"),
+            e('maturin_import_hook [INFO] building "my_project"'),
+            'maturin_import_hook \\[INFO\\] rebuilt and loaded package "my_project" in [0-9.]+s',
+            e("root [INFO] my_project extension module initialised"),
+            e("root [INFO] my_project __init__ initialised"),
+            e("reload_helper [INFO] reload 2 finish"),
+            e("reload_helper [INFO] checking extension module"),
+            e("reload_helper [INFO] checking root module"),
+            e("reload_helper [INFO] checking submodule"),
+            e("reload_helper [INFO] SUCCESS"),
+        ]
+        expected_info_pattern = "\n".join(line for line in expected_info_parts if line)
+        check_match(info, expected_info_pattern, flags=re.MULTILINE)
+
+    def test_python_submodule(self, workspace: Path) -> None:
+        """test the behaviour of reloading a mixed python/rust package with python submodules
+        that import the extension module
+        """
+        _uninstall("my-project")
+        _project_dir, lib_path = self._create_reload_project(workspace, mixed=True)
+
+        output, _ = run_python(
+            [str(helpers_dir / "reload_helper.py"), str(lib_path), "_test_python_submodule"], cwd=workspace
+        )
+        info = "\n".join(line for line in output.splitlines() if "[INFO]" in line)
+
+        assert "SUCCESS" in output
+
+        e = re.escape
+
+        expected_info_parts = [
+            e("reload_helper [INFO] initial import start"),
+            e('maturin_import_hook [INFO] building "my_project"'),  # because: no build status
+            'maturin_import_hook \\[INFO\\] rebuilt and loaded package "my_project" in [0-9.]+s',
+            e("root [INFO] my_project extension module initialised"),
+            e("root [INFO] my_project __init__ initialised"),
+            e("root [INFO] my_project submodule initialised"),
+            e("reload_helper [INFO] initial import finish"),
+            e("reload_helper [INFO] modifying project"),
+            e("reload_helper [INFO] reload submodule start"),
+            e("root [INFO] my_project submodule initialised"),
+            e("reload_helper [INFO] reload submodule finish"),
+            e("reload_helper [INFO] reload package start"),
+            e('maturin_import_hook [INFO] building "my_project"'),
+            'maturin_import_hook \\[INFO\\] rebuilt and loaded package "my_project" in [0-9.]+s',
+            e("root [INFO] my_project extension module initialised"),
+            e("root [INFO] my_project __init__ initialised"),
+            e("reload_helper [INFO] reload package finish"),
+            e("reload_helper [INFO] reload submodule start"),
+            e("root [INFO] my_project submodule initialised"),
+            e("reload_helper [INFO] reload submodule finish"),
+            e("reload_helper [INFO] SUCCESS"),
+        ]
+        expected_info_pattern = "\n".join(line for line in expected_info_parts if line)
+        check_match(info, expected_info_pattern, flags=re.MULTILINE)
+
+    @pytest.mark.parametrize("is_mixed", [False, True])
+    def test_reload_without_import_hook(self, workspace: Path, is_mixed: bool) -> None:
+        """test when reload is used without support from the import hook"""
+        _uninstall("my-project")
+        _project_dir, lib_path = self._create_reload_project(workspace, is_mixed)
+
+        output, _ = run_python(
+            [str(helpers_dir / "reload_helper.py"), str(lib_path), "_test_reload_without_import_hook"], cwd=workspace
+        )
+        assert "SUCCESS" in output
+
+        e = re.escape
+
+        expected_parts = [
+            e("reload_helper [INFO] initial import start"),
+            e("root [INFO] my_project extension module initialised"),
+            e("root [INFO] my_project __init__ initialised" if is_mixed else ""),
+            e("reload_helper [INFO] initial import finish"),
+            e("reload_helper [INFO] reload package start"),
+            e("root [INFO] my_project __init__ initialised" if is_mixed else ""),
+            e("reload_helper [INFO] reload package finish"),
+            e("reload_helper [INFO] installing import hook"),
+            e("reload_helper [INFO] modifying project"),
+            e("reload_helper [INFO] reload package start"),
+            e('maturin_import_hook [DEBUG] package "my_project" is already loaded and enable_reloading=False'),
+            e("root [INFO] my_project __init__ initialised" if is_mixed else ""),
+            e("reload_helper [INFO] reload package finish"),
+            e("reload_helper [INFO] reload extension module start"),
+            e("reload_helper [INFO] reload extension module finish"),
+            e("reload_helper [INFO] SUCCESS\n"),
+        ]
+        expected_pattern = "\n".join(line for line in expected_parts if line)
+        check_match(output, expected_pattern, flags=re.MULTILINE)
+
+    @pytest.mark.parametrize("is_mixed", [False, True])
+    def test_install_after_import(self, workspace: Path, is_mixed: bool) -> None:
+        """test using reload on packages that are imported before the import hook was installed
+        (should not make a difference)
+        """
+        _uninstall("my-project")
+        _project_dir, lib_path = self._create_reload_project(workspace, is_mixed)
+
+        output, _ = run_python(
+            [str(helpers_dir / "reload_helper.py"), str(lib_path), "_test_install_after_import"], cwd=workspace
+        )
+        info = "\n".join(line for line in output.splitlines() if "[INFO]" in line)
+
+        assert "SUCCESS" in output
+
+        e = re.escape
+
+        expected_parts = [
+            e("reload_helper [INFO] initial import start"),
+            e("root [INFO] my_project extension module initialised"),
+            e("root [INFO] my_project __init__ initialised" if is_mixed else ""),
+            e("reload_helper [INFO] initial import finish"),
+            e("reload_helper [INFO] installing import hook"),
+            e("reload_helper [INFO] modifying project"),
+            e("reload_helper [INFO] reload start"),
+            e('maturin_import_hook [INFO] building "my_project"'),
+            'maturin_import_hook \\[INFO\\] rebuilt and loaded package "my_project" in [0-9.]+s',
+            e("root [INFO] my_project extension module initialised"),
+            e("root [INFO] my_project __init__ initialised" if is_mixed else ""),
+            e("reload_helper [INFO] reload finish"),
+            e("reload_helper [INFO] SUCCESS"),
+        ]
+        expected_pattern = "\n".join(line for line in expected_parts if line)
+        check_match(info, expected_pattern, flags=re.MULTILINE)
+
+    def test_compilation_error(self, workspace: Path) -> None:
+        """test when reload is used without support from the import hook"""
+        _uninstall("my-project")
+        _project_dir, lib_path = self._create_reload_project(workspace, mixed=False)
+
+        output, _ = run_python(
+            [str(helpers_dir / "reload_helper.py"), str(lib_path), "_test_compilation_error"], cwd=workspace
+        )
+        assert "SUCCESS" in output
+
+        e = re.escape
+
+        expected_parts = [
+            e("reload_helper [INFO] installing import hook"),
+            e("reload_helper [INFO] initial import start"),
+            e('maturin_import_hook [DEBUG] MaturinProjectImporter searching for "my_project"'),
+            e('maturin_import_hook [INFO] building "my_project"'),
+            'maturin_import_hook \\[INFO\\] rebuilt and loaded package "my_project" in [0-9.]+s',
+            e("root [INFO] my_project extension module initialised"),
+            e("reload_helper [INFO] initial import finish"),
+            e("reload_helper [INFO] modifying project"),
+            e("reload_helper [INFO] reload start"),
+            e('maturin_import_hook [DEBUG] MaturinProjectImporter searching for "my_project" (reload)'),
+            e('maturin_import_hook [INFO] building "my_project"'),
+            e("expected an expression"),
+            e("maturin failed"),
+            e("reload_helper [INFO] reload failed"),
+            e("reload_helper [INFO] reload finish"),
+            e("reload_helper [INFO] SUCCESS\n"),
+        ]
+        expected_pattern = ".*".join(line for line in expected_parts if line)
+        check_match(output, expected_pattern, flags=re.MULTILINE | re.DOTALL)
+
+
+def _get_string_between(text: str, start: str, end: str) -> Optional[str]:
+    start_index = text.find(start)
+    if start_index == -1:
+        return None
+    end_index = text.find(end)
+    if end_index == -1:
+        return None
+    return text[start_index + len(start) : end_index]
+
+
+def test_get_string_between() -> None:
+    assert _get_string_between("11aaabbbccc11", "aaa", "ccc") == "bbb"
+    assert _get_string_between("11aaabbbccc11", "xxx", "ccc") is None
+    assert _get_string_between("11aaabbbccc11", "aaa", "xxx") is None
+    assert _get_string_between("11aaabbbccc11", "xxx", "xxx") is None
 
 
 class TestLogging:

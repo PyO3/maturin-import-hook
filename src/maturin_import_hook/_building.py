@@ -253,10 +253,12 @@ def run_maturin(maturin_path: Path, args: List[str]) -> Tuple[bool, str]:
         logger.error("maturin output:\n%s", output)
         return False, output
     if logger.isEnabledFor(logging.DEBUG):
+        stripped_output = output.rstrip("\n")
         logger.debug(
-            "maturin output (has warnings: %r):\n%s",
+            "maturin output (has warnings: %r):%s%s",
             maturin_output_has_warnings(output),
-            output,
+            "\n" if "\n" in stripped_output else " ",
+            stripped_output,
         )
     return True, output
 

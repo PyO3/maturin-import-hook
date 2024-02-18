@@ -148,9 +148,8 @@ def run_python(
 
     if not quiet:
         log.info("-" * 40)
-        log.info("subprocess output")
-        log.info(subprocess.list2cmdline(cmd))
-        log.info(output)
+        log.info("cmd: %s", subprocess.list2cmdline(cmd))
+        log.info("output:\n%s", output)
         log.info("-" * 40)
 
     return output, duration

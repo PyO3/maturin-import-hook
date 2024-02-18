@@ -13,6 +13,7 @@ def install(
     *,
     enable_project_importer: bool = True,
     enable_rs_file_importer: bool = True,
+    enable_reloading: bool = True,
     settings: Optional[MaturinSettings] = None,
     build_dir: Optional[Path] = None,
     install_new_packages: bool = True,
@@ -28,6 +29,8 @@ def install(
     :param enable_project_importer: enable the hook for automatically rebuilding editable installed maturin projects
 
     :param enable_rs_file_importer: enable the hook for importing .rs files as though they were regular python modules
+
+    :param enable_reloading: enable workarounds to allow the extension modules to be reloaded with `importlib.reload()`
 
     :param settings: settings corresponding to flags passed to maturin.
 
@@ -61,12 +64,14 @@ def install(
             force_rebuild=force_rebuild,
             lock_timeout_seconds=lock_timeout_seconds,
             show_warnings=show_warnings,
+            # TODO(matt): enable reloading
         )
     if enable_project_importer:
         project_importer.install(
             settings=settings,
             build_dir=build_dir,
             install_new_packages=install_new_packages,
+            enable_reloading=enable_reloading,
             force_rebuild=force_rebuild,
             excluded_dir_names=excluded_dir_names,
             lock_timeout_seconds=lock_timeout_seconds,
