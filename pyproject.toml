@@ -35,6 +35,11 @@ where = ["src"]
 [tool.ruff]
 line-length = 120
 target-version = "py38"
+
+[tool.ruff.format]
+preview = true
+
+[tool.ruff.lint]
 select = ["ALL"]
 
 # https://docs.astral.sh/ruff/rules/
