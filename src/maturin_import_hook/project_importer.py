@@ -65,8 +65,8 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
         settings: Optional[MaturinSettings] = None,
         build_dir: Optional[Path] = None,
         lock_timeout_seconds: Optional[float] = 120,
-        install_new_packages: bool = True,
         enable_reloading: bool = True,
+        enable_automatic_installation: bool = True,
         force_rebuild: bool = False,
         excluded_dir_names: Optional[Set[str]] = None,
         show_warnings: bool = True,
@@ -75,7 +75,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
         self._settings = settings
         self._build_cache = BuildCache(build_dir, lock_timeout_seconds)
         self._enable_reloading = enable_reloading
-        self._install_new_packages = install_new_packages
+        self._enable_automatic_installation = enable_automatic_installation
         self._force_rebuild = force_rebuild
         self._show_warnings = show_warnings
         self._excluded_dir_names = DEFAULT_EXCLUDED_DIR_NAMES if excluded_dir_names is None else excluded_dir_names
@@ -129,9 +129,9 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
             project_dir, is_editable = _load_dist_info(search_path, package_name)
             if project_dir is not None:
                 logger.debug('found project linked by dist-info: "%s"', project_dir)
-                if not is_editable and not self._install_new_packages:
+                if not is_editable and not self._enable_automatic_installation:
                     logger.debug(
-                        "package not installed in editable-mode and install_new_packages=False. not rebuilding"
+                        "package not installed in editable-mode and enable_automatic_installation=False. not rebuilding"
                     )
                 else:
                     spec, rebuilt = self._rebuild_project(package_name, project_dir)
@@ -225,9 +225,9 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
             )
             return None, False
 
-        if not self._install_new_packages and not _is_editable_installed_package(project_dir, package_name):
+        if not self._enable_automatic_installation and not _is_editable_installed_package(project_dir, package_name):
             logger.debug(
-                'package "%s" is not already installed and install_new_packages=False. Not importing',
+                'package "%s" is not already installed and enable_automatic_installation=False. Not importing',
                 package_name,
             )
             return None, False
@@ -544,8 +544,8 @@ def install(
     *,
     settings: Optional[MaturinSettings] = None,
     build_dir: Optional[Path] = None,
-    install_new_packages: bool = True,
     enable_reloading: bool = True,
+    enable_automatic_installation: bool = True,
     force_rebuild: bool = False,
     excluded_dir_names: Optional[Set[str]] = None,
     lock_timeout_seconds: Optional[float] = 120,
@@ -559,10 +559,10 @@ def install(
         `sys.exec_prefix / 'maturin_build_cache'` or
         `$HOME/.cache/maturin_build_cache/<interpreter_hash>` in order of preference
 
-    :param install_new_packages: whether to install detected packages using the import hook even if they
-        are not already installed into the virtual environment or are installed in non-editable mode.
-
     :param enable_reloading: enable workarounds to allow the extension modules to be reloaded with `importlib.reload()`
+
+    :param enable_automatic_installation: whether to install detected packages using the import hook even if they
+        are not already installed into the virtual environment or are installed in non-editable mode.
 
     :param force_rebuild: whether to always rebuild and skip checking whether anything has changed
 
@@ -582,8 +582,8 @@ def install(
     IMPORTER = MaturinProjectImporter(
         settings=settings,
         build_dir=build_dir,
-        install_new_packages=install_new_packages,
         enable_reloading=enable_reloading,
+        enable_automatic_installation=enable_automatic_installation,
         force_rebuild=force_rebuild,
         excluded_dir_names=excluded_dir_names,
         lock_timeout_seconds=lock_timeout_seconds,

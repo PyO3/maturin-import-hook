@@ -100,7 +100,7 @@ def test_do_not_install_from_script_inside(workspace: Path, project_name: str) -
     import maturin_import_hook
     maturin_import_hook.reset_logger()
     from maturin_import_hook import project_importer
-    project_importer.install(install_new_packages=False)
+    project_importer.install(enable_automatic_installation=False)
     """)
     check_installed_path.write_text(f"{header}\n\n{check_installed_path.read_text()}")
 
@@ -110,7 +110,7 @@ def test_do_not_install_from_script_inside(workspace: Path, project_name: str) -
     output1, _ = run_python([str(check_installed_path)], cwd=empty_dir, expect_error=True, quiet=True)
     assert (
         f'package "{with_underscores(project_name)}" is not already '
-        f"installed and install_new_packages=False. Not importing"
+        f"installed and enable_automatic_installation=False. Not importing"
     ) in output1
     assert "SUCCESS" not in output1
 
@@ -148,9 +148,9 @@ def test_do_not_rebuild_if_installed_non_editable(workspace: Path, project_name:
     logging.basicConfig(format='%(name)s [%(levelname)s] %(message)s', level=logging.DEBUG)
     import maturin_import_hook
     maturin_import_hook.reset_logger()
-    install_new_packages = len(sys.argv) > 1 and sys.argv[1] == 'INSTALL_NEW'
-    print(f'{install_new_packages=}')
-    maturin_import_hook.install(install_new_packages=install_new_packages)
+    enable_automatic_installation = len(sys.argv) > 1 and sys.argv[1] == 'INSTALL_NEW'
+    print(f'{enable_automatic_installation=}')
+    maturin_import_hook.install(enable_automatic_installation=enable_automatic_installation)
     """)
     check_installed_path.write_text(f"{header}\n\n{check_installed_path.read_text()}")
     shutil.copy(check_installed_path, check_installed_outside_project)
@@ -160,16 +160,16 @@ def test_do_not_rebuild_if_installed_non_editable(workspace: Path, project_name:
     # when outside the project, can still detect non-editable installed projects via dist-info
     output1, _ = run_python(["check_installed.py"], cwd=check_installed_outside_project)
     assert "SUCCESS" in output1
-    assert "install_new_packages=False" in output1
+    assert "enable_automatic_installation=False" in output1
     assert f'found project linked by dist-info: "{project_dir}"' in output1
-    assert "package not installed in editable-mode and install_new_packages=False. not rebuilding" in output1
+    assert "package not installed in editable-mode and enable_automatic_installation=False. not rebuilding" in output1
 
     # when inside the project, will detect the project above
     output2, _ = run_python(["check_installed.py"], cwd=check_installed_dir)
     assert "SUCCESS" in output2
-    assert "install_new_packages=False" in output2
+    assert "enable_automatic_installation=False" in output2
     assert "found project above the search path:" in output2
-    assert "package not installed in editable-mode and install_new_packages=False. not rebuilding" in output2
+    assert "package not installed in editable-mode and enable_automatic_installation=False. not rebuilding" in output2
 
     output3, _ = run_python(
         ["check_installed.py", "INSTALL_NEW"],
@@ -178,7 +178,7 @@ def test_do_not_rebuild_if_installed_non_editable(workspace: Path, project_name:
         expect_error=True,
     )
     assert "SUCCESS" not in output3
-    assert "install_new_packages=True" in output3
+    assert "enable_automatic_installation=True" in output3
     pattern = f"ImportError: {missing_entrypoint_error_message_pattern(with_underscores(project_name))}"
     assert re.search(pattern, output3) is not None
 

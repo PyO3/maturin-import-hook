@@ -14,9 +14,9 @@ def install(
     enable_project_importer: bool = True,
     enable_rs_file_importer: bool = True,
     enable_reloading: bool = True,
+    enable_automatic_installation: bool = True,
     settings: Optional[MaturinSettings] = None,
     build_dir: Optional[Path] = None,
-    install_new_packages: bool = True,
     force_rebuild: bool = False,
     excluded_dir_names: Optional[Set[str]] = None,
     lock_timeout_seconds: Optional[float] = 120,
@@ -32,14 +32,14 @@ def install(
 
     :param enable_reloading: enable workarounds to allow the extension modules to be reloaded with `importlib.reload()`
 
+    :param enable_automatic_install: whether to install detected packages using the import hook even if they
+        are not already installed into the virtual environment or are installed in non-editable mode.
+
     :param settings: settings corresponding to flags passed to maturin.
 
     :param build_dir: where to put the compiled artifacts. defaults to `$MATURIN_BUILD_DIR`,
         `sys.exec_prefix / 'maturin_build_cache'` or
         `$HOME/.cache/maturin_build_cache/<interpreter_hash>` in order of preference
-
-    :param install_new_packages: whether to install detected packages using the import hook even if they
-        are not already installed into the virtual environment or are installed in non-editable mode.
 
     :param force_rebuild: whether to always rebuild and skip checking whether anything has changed
 
@@ -70,7 +70,7 @@ def install(
         project_importer.install(
             settings=settings,
             build_dir=build_dir,
-            install_new_packages=install_new_packages,
+            enable_automatic_installation=enable_automatic_installation,
             enable_reloading=enable_reloading,
             force_rebuild=force_rebuild,
             excluded_dir_names=excluded_dir_names,
