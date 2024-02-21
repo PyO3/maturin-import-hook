@@ -197,6 +197,16 @@ def check_match(text: str, pattern: str, *, flags: int = 0) -> None:
     assert matches, f'text does not match pattern:\npattern: "{pattern}"\ntext:\n{text}'
 
 
+def get_string_between(text: str, start: str, end: str) -> Optional[str]:
+    start_index = text.find(start)
+    if start_index == -1:
+        return None
+    end_index = text.find(end)
+    if end_index == -1:
+        return None
+    return text[start_index + len(start) : end_index]
+
+
 def missing_entrypoint_error_message_pattern(name: str) -> str:
     if platform.python_implementation() == "CPython":
         return f"dynamic module does not define module export function \\(PyInit_{name}\\)"

@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 from textwrap import dedent
-from typing import Iterator, Optional, Tuple
+from typing import Iterator, Tuple
 
 import pytest
 from maturin_import_hook._building import fix_direct_url
@@ -18,6 +18,7 @@ from .common import (
     TEST_CRATES_DIR,
     all_usable_test_crate_names,
     check_match,
+    get_string_between,
     missing_entrypoint_error_message_pattern,
     mixed_test_crate_names,
     remove_ansii_escape_characters,
@@ -493,6 +494,8 @@ class TestReload:
 
     The tests are organised to strike a balance between having many tests for individual behaviours and bundling
     checks together to reduce the time spent compiling.
+
+    see docs/reloading.md for details
     """
 
     @staticmethod
@@ -611,14 +614,14 @@ class TestReload:
         check_match(info, expected_info_pattern, flags=re.MULTILINE)
 
         # these checks ensure that the internals of the import hook are performing the expected actions
-        initial_import = _get_string_between(output, "initial import start", "initial import finish")
+        initial_import = get_string_between(output, "initial import start", "initial import finish")
         assert initial_import is not None
         assert 'MaturinProjectImporter searching for "my_project"' in initial_import
         assert 'building "my_project"' in initial_import
 
         assert 'handling reload of "my_project"' not in initial_import
 
-        reload_1 = _get_string_between(output, "reload 1 start", "reload 1 finish")
+        reload_1 = get_string_between(output, "reload 1 start", "reload 1 finish")
         assert reload_1 is not None
         assert 'MaturinProjectImporter searching for "my_project" (reload)' in reload_1
         assert 'building "my_project"' in reload_1
@@ -627,7 +630,7 @@ class TestReload:
 
         assert 'package up to date: "my_project"' not in reload_1
 
-        reload_2 = _get_string_between(output, "reload 2 start", "reload 2 finish")
+        reload_2 = get_string_between(output, "reload 2 start", "reload 2 finish")
         assert reload_2 is not None
         assert 'MaturinProjectImporter searching for "my_project" (reload)' in reload_2
         assert 'package up to date: "my_project"' in reload_2
@@ -636,7 +639,7 @@ class TestReload:
 
         assert 'building "my_project"' not in reload_2
 
-        reload_3 = _get_string_between(output, "reload 3 start", "reload 3 finish")
+        reload_3 = get_string_between(output, "reload 3 start", "reload 3 finish")
         assert reload_3 is not None
         assert 'MaturinProjectImporter searching for "my_project" (reload)' in reload_3
         assert 'building "my_project"' in reload_3
@@ -645,7 +648,7 @@ class TestReload:
 
         assert 'package up to date: "my_project"' not in reload_3
 
-        reload_4 = _get_string_between(output, "reload 4 start", "reload 4 finish")
+        reload_4 = get_string_between(output, "reload 4 start", "reload 4 finish")
         assert reload_4 is not None
         assert 'MaturinProjectImporter searching for "my_project"' not in reload_4
 
@@ -832,7 +835,6 @@ class TestReload:
         e = re.escape
 
         expected_parts = [
-            e("reload_helper [INFO] installing import hook"),
             e("reload_helper [INFO] initial import start"),
             e('maturin_import_hook [DEBUG] MaturinProjectImporter searching for "my_project"'),
             e('maturin_import_hook [INFO] building "my_project"'),
@@ -852,30 +854,45 @@ class TestReload:
         expected_pattern = ".*".join(line for line in expected_parts if line)
         check_match(output, expected_pattern, flags=re.MULTILINE | re.DOTALL)
 
+    def test_pickling(self, workspace: Path) -> None:
+        """test the classes that can be pickled behave as expected when the module is reloaded"""
+        _uninstall("my-project")
+        _project_dir, lib_path = self._create_reload_project(workspace, mixed=False)
 
-def _get_string_between(text: str, start: str, end: str) -> Optional[str]:
-    start_index = text.find(start)
-    if start_index == -1:
-        return None
-    end_index = text.find(end)
-    if end_index == -1:
-        return None
-    return text[start_index + len(start) : end_index]
+        output, _ = run_python([str(helpers_dir / "reload_helper.py"), str(lib_path), "_test_pickling"], cwd=workspace)
+        assert "SUCCESS" in output
 
+        e = re.escape
 
-def test_get_string_between() -> None:
-    assert _get_string_between("11aaabbbccc11", "aaa", "ccc") == "bbb"
-    assert _get_string_between("11aaabbbccc11", "xxx", "ccc") is None
-    assert _get_string_between("11aaabbbccc11", "aaa", "xxx") is None
-    assert _get_string_between("11aaabbbccc11", "xxx", "xxx") is None
+        expected_parts = [
+            e("reload_helper [INFO] initial import start"),
+            e('maturin_import_hook [DEBUG] MaturinProjectImporter searching for "my_project"'),
+            e('maturin_import_hook [INFO] building "my_project"'),
+            'maturin_import_hook \\[INFO\\] rebuilt and loaded package "my_project" in [0-9.]+s',
+            e("root [INFO] my_project extension module initialised"),
+            e("reload_helper [INFO] initial import finish"),
+            e("reload_helper [INFO] modifying project"),
+            e("reload_helper [INFO] reload start"),
+            e('maturin_import_hook [DEBUG] MaturinProjectImporter searching for "my_project" (reload)'),
+            e('maturin_import_hook [INFO] building "my_project"'),
+            'maturin_import_hook \\[INFO\\] rebuilt and loaded package "my_project" in [0-9.]+s',
+            e("reload_helper [INFO] reload finish"),
+            e("reload_helper [INFO] SUCCESS\n"),
+        ]
+        expected_pattern = ".*".join(line for line in expected_parts if line)
+        check_match(output, expected_pattern, flags=re.MULTILINE | re.DOTALL)
 
 
 class TestLogging:
     """These tests ensure that the desired messages are visible to the user in the default logging configuration."""
 
     @staticmethod
-    def _loader_script() -> str:
+    def _logging_helper() -> str:
         return (helpers_dir / "logging_helper.py").read_text()
+
+    @staticmethod
+    def _logging_reload_helper() -> str:
+        return (helpers_dir / "logging_reload_helper.py").read_text()
 
     @staticmethod
     def _create_clean_project(tmp_dir: Path, is_mixed: bool) -> Path:
@@ -893,7 +910,7 @@ class TestLogging:
     def test_maturin_detection(self, workspace: Path) -> None:
         self._create_clean_project(workspace, True)
 
-        output, _ = run_python_code(self._loader_script(), env={"PATH": ""})
+        output, _ = run_python_code(self._logging_helper(), env={"PATH": ""})
         assert output == "building \"test_project\"\ncaught MaturinError('maturin not found')\n"
 
         extra_bin = workspace / "bin"
@@ -902,7 +919,7 @@ class TestLogging:
         mock_maturin_path.write_text('#!/usr/bin/env bash\necho "maturin 0.1.2"')
         mock_maturin_path.chmod(0o777)
 
-        output, _ = run_python_code(self._loader_script(), env={"PATH": f"{extra_bin}:/usr/bin"})
+        output, _ = run_python_code(self._logging_helper(), env={"PATH": f"{extra_bin}:/usr/bin"})
         assert output == (
             'building "test_project"\n'
             "caught MaturinError('unsupported maturin version: (0, 1, 2). "
@@ -916,7 +933,7 @@ class TestLogging:
         """
         self._create_clean_project(workspace, is_mixed)
 
-        output, _ = run_python_code(self._loader_script())
+        output, _ = run_python_code(self._logging_helper())
         pattern = (
             'building "test_project"\n'
             'rebuilt and loaded package "test_project" in [0-9.]+s\n'
@@ -930,9 +947,9 @@ class TestLogging:
         """By default, when the module is up-to-date nothing is printed."""
         self._create_clean_project(workspace / "project", is_mixed)
 
-        run_python_code(self._loader_script())  # run once to rebuild
+        run_python_code(self._logging_helper())  # run once to rebuild
 
-        output, _ = run_python_code(self._loader_script())
+        output, _ = run_python_code(self._logging_helper())
         assert output == "value 10\nSUCCESS\n"
 
     @pytest.mark.parametrize("is_mixed", [False, True])
@@ -943,7 +960,7 @@ class TestLogging:
         lib_path = project_dir / "src/lib.rs"
         lib_path.write_text(lib_path.read_text().replace("Ok(())", ""))
 
-        output, _ = run_python_code(self._loader_script())
+        output, _ = run_python_code(self._logging_helper())
         pattern = (
             'building "test_project"\n'
             'maturin_import_hook \\[ERROR\\] command ".*" returned non-zero exit status: 1\n'
@@ -967,7 +984,7 @@ class TestLogging:
         lib_path = project_dir / "src/lib.rs"
         lib_path.write_text(lib_path.read_text().replace("Ok(())", "#[warn(unused_variables)]{let x = 12;}; Ok(())"))
 
-        output1, _ = run_python_code(self._loader_script())
+        output1, _ = run_python_code(self._logging_helper())
         output1 = remove_ansii_escape_characters(output1)
         pattern = (
             'building "test_project"\n'
@@ -981,7 +998,7 @@ class TestLogging:
         )
         check_match(output1, pattern, flags=re.MULTILINE | re.DOTALL)
 
-        output2, _ = run_python_code(self._loader_script())
+        output2, _ = run_python_code(self._logging_helper())
         output2 = remove_ansii_escape_characters(output2)
         pattern = (
             'maturin_import_hook \\[WARNING\\] the last build of "test_project" succeeded with warnings:\n'
@@ -993,13 +1010,27 @@ class TestLogging:
         )
         check_match(output2, pattern, flags=re.MULTILINE | re.DOTALL)
 
+    def test_reload(self, workspace: Path) -> None:
+        self._create_clean_project(workspace, is_mixed=False)
+
+        output, _ = run_python_code(self._logging_reload_helper())
+        pattern = (
+            "reloading\n"
+            'building "test_project"\n'
+            'rebuilt and loaded package "test_project" in [0-9.]+s\n'
+            "reloading again\n"
+            "value 10\n"
+            "SUCCESS\n"
+        )
+        check_match(output, pattern, flags=re.MULTILINE)
+
     @pytest.mark.parametrize("is_mixed", [False, True])
     def test_reset_logger_without_configuring(self, workspace: Path, is_mixed: bool) -> None:
         """If reset_logger is called then by default logging level INFO is not printed
         (because the messages are handled by the root logger).
         """
         self._create_clean_project(workspace / "project", is_mixed)
-        output, _ = run_python_code(self._loader_script(), args=["RESET_LOGGER"])
+        output, _ = run_python_code(self._logging_helper(), args=["RESET_LOGGER"])
         assert output == "value 10\nSUCCESS\n"
 
     @pytest.mark.parametrize("is_mixed", [False, True])
@@ -1009,7 +1040,7 @@ class TestLogging:
         lib_path = project_dir / "src/lib.rs"
         lib_path.write_text(lib_path.read_text().replace("test_project", "test_project_new_name"))
 
-        output, _ = run_python_code(self._loader_script(), quiet=True)
+        output, _ = run_python_code(self._logging_helper(), quiet=True)
         pattern = (
             'building "test_project"\n'
             'rebuilt and loaded package "test_project" in [0-9.]+s\n'

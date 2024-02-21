@@ -16,7 +16,7 @@ from maturin_import_hook.project_importer import (
 )
 from maturin_import_hook.settings import MaturinBuildSettings, MaturinDevelopSettings, MaturinSettings
 
-from .common import TEST_CRATES_DIR, ResolvedPackage, map_optional, resolved_packages
+from .common import TEST_CRATES_DIR, ResolvedPackage, get_string_between, map_optional, resolved_packages
 
 log = logging.getLogger(__name__)
 
@@ -341,6 +341,13 @@ def test_toml_file(caplog: pytest.LogCaptureFixture) -> None:
     assert toml_file.get_value(["foo", "baz", "xyz"], int) is None
     assert caplog.messages == ["failed to get int value at 'foo.baz.xyz' from toml file: '/toml_path'"]
     caplog.clear()
+
+
+def test_get_string_between() -> None:
+    assert get_string_between("11aaabbbccc11", "aaa", "ccc") == "bbb"
+    assert get_string_between("11aaabbbccc11", "xxx", "ccc") is None
+    assert get_string_between("11aaabbbccc11", "aaa", "xxx") is None
+    assert get_string_between("11aaabbbccc11", "xxx", "xxx") is None
 
 
 def _small_sleep() -> None:

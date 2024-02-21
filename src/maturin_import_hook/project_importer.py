@@ -106,10 +106,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
 
         already_loaded = package_name in sys.modules
         if already_loaded and not self._enable_reloading:
-            # there would be no point triggering a rebuild in this case because even after being rebuilt, the extension
-            # module would not automatically be reloaded and manually calling reload() on the extension module has
-            # no effect as reloading extension modules (without the hack that enable_reloading=True uses) is not
-            # possible (see docs/reloading.md)
+            # there would be no point triggering a rebuild in this case. see docs/reloading.md
             logger.debug('package "%s" is already loaded and enable_reloading=False', package_name)
             return None
 
@@ -165,12 +162,12 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
 
         see docs/reloading.md for full details
         """
-        debug_enabled = logger.isEnabledFor(logging.DEBUG)
-        if debug_enabled:
+        debug_log_enabled = logger.isEnabledFor(logging.DEBUG)
+        if debug_log_enabled:
             logger.debug('handling reload of "%s"', package_name)
 
         if self._reload_tmp_path is None:
-            self._reload_tmp_path = Path(tempfile.mkdtemp(prefix="MaturinProjectImporter"))
+            self._reload_tmp_path = Path(tempfile.mkdtemp(prefix=type(self).__name__))
 
         if spec.origin is None:
             logger.error("module spec has no origin. cannot reload")
@@ -182,7 +179,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
 
         this_reload_dir = Path(tempfile.mkdtemp(prefix=package_name, dir=self._reload_tmp_path))
         (this_reload_dir / package_name).symlink_to(origin.parent)
-        if debug_enabled:
+        if debug_log_enabled:
             logger.debug("package reload symlink: %s", this_reload_dir)
 
         path_finder = PathFinder()
@@ -197,7 +194,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
             for name, module in sys.modules.items()
             if name.startswith(name_prefix) and isinstance(module.__loader__, ExtensionFileLoader)
         )
-        if debug_enabled:
+        if debug_log_enabled:
             logger.debug("unloading %s modules: %s", len(to_unload), to_unload)
         for name in to_unload:
             del sys.modules[name]

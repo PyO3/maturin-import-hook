@@ -1,6 +1,7 @@
 # ruff: noqa: E402
 import importlib
 import logging
+import pickle
 import re
 import sys
 from pathlib import Path
@@ -12,10 +13,12 @@ maturin_import_hook.reset_logger()
 
 log = logging.getLogger("reload_helper")
 
+rs_path = Path(sys.argv[1])
+assert rs_path.exists()
+action = sys.argv[2]
+
 
 def _modify_project_num(num: int | str) -> None:
-    rs_path = Path(sys.argv[1])
-    assert rs_path.exists()
     source = rs_path.read_text()
     source = re.sub("let num = .*;", f"let num = {num};", source)
     rs_path.write_text(source)
@@ -365,7 +368,6 @@ def _test_install_after_import() -> None:
 def _test_compilation_error() -> None:
     from maturin_import_hook.error import MaturinError
 
-    log.info("installing import hook")
     maturin_import_hook.install()
 
     log.info("initial import start")
@@ -393,7 +395,49 @@ def _test_compilation_error() -> None:
     log.info("SUCCESS")
 
 
-action = sys.argv[2]
+def _test_pickling() -> None:
+    maturin_import_hook.install()
+
+    log.info("initial import start")
+    import my_project  # type: ignore[missing-import]
+
+    log.info("initial import finish")
+
+    int_a = my_project.PicklableInteger(123, "a")
+    int_b = my_project.PicklableInteger(123, "b")
+    int_c = my_project.PicklableInteger(999, "c")
+    assert int_a == int_b
+    assert int_a != int_c
+    assert type(int_a) is type(int_b)
+    assert isinstance(int_b, type(int_a))
+    int_a_data = pickle.dumps(int_a)
+    int_a_unpickled_1 = pickle.loads(int_a_data)
+    assert int_a == int_a_unpickled_1
+    assert type(int_a_unpickled_1) is type(int_a)
+
+    log.info("modifying project")
+    _modify_project_num(15)
+
+    log.info("reload start")
+    importlib.reload(my_project)
+    log.info("reload finish")
+
+    int_d = my_project.PicklableInteger(123, "d")
+    int_e = my_project.PicklableInteger(123, "e")
+    assert int_d != int_a  # compared by identity since different types. PicklableInteger.__richcmp__ is never called
+    assert int_d == int_e
+    assert type(int_a) is not type(int_d)
+    assert type(int_a).__qualname__ == "PicklableInteger"
+    assert type(int_d).__qualname__ == "PicklableInteger"
+    assert not isinstance(int_d, type(int_a))
+    int_a_unpickled_2 = pickle.loads(int_a_data)
+    assert int_d != int_a_unpickled_1
+    assert int_d == int_a_unpickled_2
+    assert type(int_d) is type(int_a_unpickled_2)
+
+    log.info("SUCCESS")
+
+
 if action == "_test_basic_reload":
     _test_basic_reload()
 elif action == "_test_globals":
@@ -406,5 +450,7 @@ elif action == "_test_install_after_import":
     _test_install_after_import()
 elif action == "_test_compilation_error":
     _test_compilation_error()
+elif action == "_test_pickling":
+    _test_pickling()
 else:
     raise ValueError(action)
