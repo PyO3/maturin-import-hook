@@ -18,6 +18,7 @@ from .common import (
     TEST_CRATES_DIR,
     all_usable_test_crate_names,
     check_match,
+    get_file_times,
     get_string_between,
     missing_entrypoint_error_message_pattern,
     mixed_test_crate_names,
@@ -25,6 +26,7 @@ from .common import (
     run_concurrent_python,
     run_python,
     run_python_code,
+    set_file_times_recursive,
     with_underscores,
 )
 
@@ -486,6 +488,70 @@ def test_rebuild_on_settings_change(workspace: Path, is_mixed: bool) -> None:
     assert "building with large_number feature enabled" in output4
     assert 'package up to date: "my_project"' in output4
     assert "get_num = 100" in output4
+    assert "SUCCESS" in output4
+
+
+def test_low_resolution_mtime(workspace: Path) -> None:
+    """see test_rust_file_importer.test_low_resolution_mtime"""
+    # managing the times manually with this timer file ensures that cargo does not do any unwanted caching of its own
+    timer_path = workspace / "timer"
+    timer_path.touch()
+
+    _uninstall("my-project")
+
+    project_dir = _create_project_from_blank_template("my-project", workspace / "my-project", mixed=False)
+    source_root = project_dir / "src"
+    lib_path = source_root / "lib.rs"
+    shutil.copy(helpers_dir / "my_project.rs", lib_path)
+
+    _install_editable(project_dir)
+    assert _is_editable_installed_correctly("my-project", project_dir, False)
+
+    helper_path = helpers_dir / "low_resolution_mtime_helper.py"
+
+    output1, _ = run_python([str(helper_path)], cwd=workspace)
+    assert 'building "my_project"' in output1
+    assert 'package "my_project" will be rebuilt because: no build status found' in output1
+    assert "get_num = 10" in output1
+    assert "SUCCESS" in output1
+
+    package_path = Path((workspace / "package_path.txt").read_text())
+    extension_path = Path((workspace / "extension_path.txt").read_text())
+
+    def set_mtimes_equal() -> None:
+        oldest_package_path = min(
+            (p for p in _get_installation_paths(package_path, {"__pycache__"})), key=lambda p: p.stat().st_mtime
+        )
+        times = get_file_times(oldest_package_path)
+        set_file_times_recursive(package_path, times)
+        set_file_times_recursive(source_root, times)
+
+    lib_path.write_text(lib_path.read_text().replace("let num = 10;", "let num = 20;"))
+    set_mtimes_equal()
+
+    output2, _ = run_python([str(helper_path)], cwd=workspace)
+    assert 'building "my_project"' in output2
+    assert 'package "my_project" will be rebuilt because: installation may be out of date' in output2
+    assert "get_num = 20" in output2
+    assert "SUCCESS" in output2
+
+    # set the mtimes equal again but this time nothing has changed. A rebuild should still be triggered
+    set_mtimes_equal()
+
+    output3, _ = run_python([str(helper_path)], cwd=workspace)
+    assert 'building "my_project"' in output3
+    assert 'package "my_project" will be rebuilt because: installation may be out of date' in output3
+    assert "get_num = 20" in output3
+    assert "SUCCESS" in output3
+
+    extension_stat = extension_path.stat()
+    source_code_stat = lib_path.stat()
+    # extension mtime should be strictly greater to remove the ambiguity about which is newer
+    assert source_code_stat.st_mtime < extension_stat.st_mtime
+
+    output4, _ = run_python([str(helper_path)], cwd=workspace)
+    assert 'building "my_project"' not in output4
+    assert "get_num = 20" in output4
     assert "SUCCESS" in output4
 
 

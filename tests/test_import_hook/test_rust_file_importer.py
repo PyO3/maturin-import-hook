@@ -5,10 +5,12 @@ from typing import Tuple
 
 from .common import (
     check_match,
+    get_file_times,
     missing_entrypoint_error_message_pattern,
     remove_ansii_escape_characters,
     run_concurrent_python,
     run_python,
+    set_file_times,
 )
 
 """
@@ -134,6 +136,71 @@ def test_rebuild_on_change(workspace: Path) -> None:
 
     assert "module up to date" not in output2
     assert "creating project for" in output2
+
+
+def test_low_resolution_mtime(workspace: Path) -> None:
+    """test that the import hook works if the mtime of the filesystem has a low resolution
+    (making the exact ordering of the extension module vs the source code ambiguous)
+
+    by calling touch() in a loop, one can measure the time taken before the mtime of the written file changes.
+    Writes that are close together may not update the mtime. On my Linux system I found that tmpfs and ext4 filesystems
+    updated after ~3ms which is enough time to perform hundreds of small writes. On other/older filesystems the interval
+    can be as large as a few seconds so this edge case is worth considering.
+
+    If the extension module and source code have the same mtime then either one could be the last written to so a
+    rebuild should be triggered. This rebuild should update the mtime so that the ambiguity is no longer present even
+    if the content of the extension module is up to date and therefore not modified.
+    """
+    script_path = workspace / "my_script.rs"
+    helper_path = shutil.copy(helpers_dir / "low_resolution_mtime_helper.py", workspace)
+
+    shutil.copy(helpers_dir / "my_script_1.rs", script_path)
+
+    output1, _ = run_python([str(helper_path)], cwd=workspace)
+    assert 'building "my_script"' in output1
+    assert 'module "my_script" will be rebuilt because: already built module not found' in output1
+    assert "get_num = 10" in output1
+    assert "SUCCESS" in output1
+
+    extension_path = Path((workspace / "extension_path.txt").read_text())
+
+    # the script is modified but assigned an mtime equal to the extension module. This simulates an edit being
+    # made shortly after the extension module is built. The time window for this problem to occur varies
+    # depending on the filesystem. The problem can also occur in reverse (built immediately after an edit) but this
+    # is less likely since building takes significant time.
+    shutil.copy(helpers_dir / "my_script_2.rs", script_path)
+    times = get_file_times(extension_path)
+    set_file_times(script_path, times)
+    set_file_times(extension_path, times)
+
+    output2, _ = run_python([str(helper_path)], cwd=workspace)
+    assert 'building "my_script"' in output2
+    assert 'module "my_script" will be rebuilt because: installation may be out of date' in output2
+    assert "get_num = 20" in output2
+    assert "SUCCESS" in output2
+
+    # this time, the mtimes are identical but nothing has changed. A rebuild should be triggered and even if the
+    # extension module is unchanged the mtime of the extension module should be updated to prevent any more
+    # unnecessary rebuilds
+    times = get_file_times(extension_path)
+    set_file_times(script_path, times)
+    set_file_times(extension_path, times)
+
+    output3, _ = run_python([str(helper_path)], cwd=workspace)
+    assert 'building "my_script"' in output3
+    assert 'module "my_script" will be rebuilt because: installation may be out of date' in output3
+    assert "get_num = 20" in output3
+    assert "SUCCESS" in output3
+
+    extension_stat = extension_path.stat()
+    source_code_stat = script_path.stat()
+    # extension mtime should be strictly greater to remove the ambiguity about which is newer
+    assert source_code_stat.st_mtime < extension_stat.st_mtime
+
+    output4, _ = run_python([str(helper_path)], cwd=workspace)
+    assert 'building "my_script"' not in output4
+    assert "get_num = 20" in output4
+    assert "SUCCESS" in output4
 
 
 def test_rebuild_on_settings_change(workspace: Path) -> None:
