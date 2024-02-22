@@ -11,8 +11,9 @@ import sys
 import zipfile
 from contextlib import contextmanager
 from dataclasses import dataclass
+from operator import itemgetter
 from pathlib import Path
-from typing import Any, Dict, Generator, List, Optional, Tuple
+from typing import Any, Dict, Generator, Iterable, List, Optional, Tuple
 
 import filelock
 
@@ -286,3 +287,85 @@ def _find_single_file(dir_path: Path, extension: Optional[str]) -> Optional[Path
 
 def maturin_output_has_warnings(output: str) -> bool:
     return re.search(r"`.*` \((lib|bin)\) generated [0-9]+ warnings?", output) is not None
+
+
+@dataclass
+class Freshness:
+    is_fresh: bool
+    reason: str
+    oldest_installed_path: Optional[Path]
+    newest_source_path: Optional[Path]
+
+
+def get_installation_freshness(
+    source_paths: Iterable[Path],
+    installed_paths: Iterable[Path],
+    build_status: BuildStatus,
+) -> Freshness:
+    """
+    determine whether an installed package or extension module is 'fresh', meaning that it is newer than any of the
+    source files that it is derived from and matches the metadata of the last build by the import hook.
+
+    Args:
+        source_paths: an iterable of *file* paths that should trigger a rebuild if any are newer than any installed path
+        installed_paths: an iterable of *file* paths that should trigger a rebuild if any are older than any source path
+        build_status: the metadata of the last build, to compare with the installed paths
+    """
+    debug_enabled = logger.isEnabledFor(logging.DEBUG)
+
+    try:
+        oldest_installed_path, installation_mtime = min(
+            ((path, path.stat().st_mtime) for path in installed_paths), key=itemgetter(1)
+        )
+    except ValueError:
+        return Freshness(False, "no installed files found", None, None)
+    except OSError as e:
+        # non-fatal as perhaps rebuilding will clear out bad files,
+        # but this could also be turned into an error
+        logger.error("error reading installed file mtimes: %r (%s)", e, e.filename)
+        return Freshness(False, "failed to read installed files", None, None)
+
+    if debug_enabled:
+        logger.debug("oldest installed file: %s (at %f)", oldest_installed_path, installation_mtime)
+
+    if abs(build_status.build_mtime - installation_mtime) > 5e-3:
+        return Freshness(False, "installation mtime does not match build status mtime", oldest_installed_path, None)
+
+    try:
+        newest_source_path, source_mtime = max(
+            ((path, path.stat().st_mtime) for path in source_paths), key=itemgetter(1)
+        )
+    except ValueError:
+        msg = "no source files found"
+        raise ImportHookError(msg) from None
+    except OSError as e:
+        # fatal because a build is unlikely to succeed anyway,
+        # but this could also be turned into a non-fatal log message
+        msg = f"error reading source file mtimes: {e!r} ({e.filename})"
+        raise ImportHookError(msg) from None
+
+    if debug_enabled:
+        logger.debug("newest source file: %s (at %f)", newest_source_path, source_mtime)
+
+    if installation_mtime == source_mtime:
+        # writes made in quick succession often result in exactly identical mtimes because the resolution of the mtime
+        # timer is not always very high (eg 3ms on a sample Linux machine in tmpfs and ext4). Some filesystems only have
+        # resolution of ~1 second so this edge case is worth considering.
+        return Freshness(False, "installation may be out of date", oldest_installed_path, newest_source_path)
+    elif installation_mtime < source_mtime:
+        return Freshness(False, "installation is out of date", oldest_installed_path, newest_source_path)
+    else:
+        return Freshness(True, "", oldest_installed_path, newest_source_path)
+
+
+def get_installation_mtime(installed_paths: Iterable[Path]) -> Optional[float]:
+    try:
+        installation_mtime = min(path.stat().st_mtime for path in installed_paths)
+    except ValueError:
+        logger.debug("no installed files found")
+        return None
+    except OSError as e:
+        logger.error("error reading installed file mtimes: %r (%s)", e, e.filename)
+        return None
+    else:
+        return installation_mtime

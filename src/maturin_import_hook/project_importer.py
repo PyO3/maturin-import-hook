@@ -5,7 +5,6 @@ import importlib.machinery
 import itertools
 import json
 import logging
-import math
 import os
 import site
 import sys
@@ -16,7 +15,7 @@ import urllib.request
 from importlib.machinery import ExtensionFileLoader, ModuleSpec, PathFinder
 from pathlib import Path
 from types import ModuleType
-from typing import Iterable, List, Optional, Sequence, Set, Tuple, Union
+from typing import Iterable, Iterator, List, Optional, Sequence, Set, Tuple, Union
 
 from maturin_import_hook._building import (
     BuildCache,
@@ -25,6 +24,8 @@ from maturin_import_hook._building import (
     develop_build_project,
     find_maturin,
     fix_direct_url,
+    get_installation_freshness,
+    get_installation_mtime,
     maturin_output_has_warnings,
 )
 from maturin_import_hook._logging import logger
@@ -262,7 +263,9 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
             if installed_package_root is None:
                 logger.error("could not get installed package root")
             else:
-                mtime = _get_installed_package_mtime(installed_package_root, self._excluded_dir_names)
+                mtime = get_installation_mtime(
+                    _get_installation_paths(installed_package_root, self._excluded_dir_names)
+                )
                 if mtime is None:
                     logger.error("could not get installed package mtime")
                 else:
@@ -295,28 +298,21 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
         if installed_package_root is None:
             return None, "could not find installed package root"
 
-        installed_package_mtime = _get_installed_package_mtime(installed_package_root, self._excluded_dir_names)
-        if installed_package_mtime is None:
-            return None, "could not get installed package mtime"
-
-        if not _package_is_up_to_date(
-            project_dir,
-            resolved.all_path_dependencies,
-            installed_package_root,
-            installed_package_mtime,
-            self._excluded_dir_names,
-        ):
-            return None, "package is out of date"
-
         build_status = build_cache.get_build_status(project_dir)
         if build_status is None:
             return None, "no build status found"
         if build_status.source_path != project_dir:
             return None, "source path in build status does not match the project dir"
-        if not math.isclose(build_status.build_mtime, installed_package_mtime):
-            return None, "installed package mtime does not match build status mtime"
         if build_status.maturin_args != settings.to_args():
             return None, "current maturin args do not match the previous build"
+
+        installed_paths = _get_installation_paths(installed_package_root, self._excluded_dir_names)
+        source_paths = _get_source_paths(
+            project_dir, resolved.all_path_dependencies, installed_package_root, self._excluded_dir_names
+        )
+        freshness = get_installation_freshness(source_paths, installed_paths, build_status)
+        if not freshness.is_fresh:
+            return None, freshness.reason
 
         logger.debug('package up to date: "%s" ("%s")', package_name, spec.origin)
 
@@ -435,76 +431,6 @@ def _find_installed_package_root(resolved: MaturinProject, package_spec: ModuleS
         return None
 
 
-def _get_installed_package_mtime(installed_package_root: Path, excluded_dir_names: Set[str]) -> Optional[float]:
-    if installed_package_root.is_dir():
-        try:
-            return min(
-                path.stat().st_mtime
-                for path in _get_files_in_dirs((installed_package_root,), excluded_dir_names, set())
-            )
-        except ValueError:
-            logger.debug('no installed files found in "%s"', installed_package_root)
-            return None
-    else:
-        try:
-            return installed_package_root.stat().st_mtime
-        except FileNotFoundError:
-            logger.debug('extension module not found: "%s"', installed_package_root)
-            return None
-
-
-def _get_project_mtime(
-    project_dir: Path,
-    all_path_dependencies: List[Path],
-    installed_package_root: Path,
-    excluded_dir_names: Set[str],
-) -> Optional[float]:
-    """get the mtime of the last modified file of the given project or any of its local dependencies"""
-    excluded_dirs = set()
-    if installed_package_root.is_dir():
-        excluded_dirs.add(installed_package_root)
-
-    try:
-        latest_path = max(
-            _get_files_in_dirs(
-                itertools.chain((project_dir,), all_path_dependencies),
-                excluded_dir_names,
-                excluded_dirs,
-            ),
-            key=lambda p: p.stat().st_mtime,
-        )
-    except FileNotFoundError as e:
-        logger.debug("error getting project mtime: %r (%s)", e, e.filename)
-        return None
-    except ValueError as e:
-        logger.debug("error getting project mtime: %r", e)
-        return None
-    else:
-        mtime = latest_path.stat().st_mtime
-        logger.debug("most recently written path: '%s' at %f", latest_path, mtime)
-        return mtime
-
-
-def _package_is_up_to_date(
-    project_dir: Path,
-    all_path_dependencies: List[Path],
-    installed_package_root: Path,
-    installed_package_mtime: float,
-    excluded_dir_names: Set[str],
-) -> bool:
-    project_mtime = _get_project_mtime(project_dir, all_path_dependencies, installed_package_root, excluded_dir_names)
-    if project_mtime is None:
-        return False
-
-    logger.debug(
-        "extension mtime: %f %s project mtime: %f",
-        installed_package_mtime,
-        ">=" if installed_package_mtime >= project_mtime else "<",
-        project_mtime,
-    )
-    return installed_package_mtime >= project_mtime
-
-
 def _find_extension_module(dir_path: Path, module_name: str, *, require: bool = False) -> Optional[Path]:
     if (dir_path / module_name / "__init__.py").exists():
         return dir_path / module_name
@@ -520,11 +446,37 @@ def _find_extension_module(dir_path: Path, module_name: str, *, require: bool = 
     return None
 
 
+def _get_installation_paths(installed_package_root: Path, excluded_dir_names: Set[str]) -> Iterator[Path]:
+    if installed_package_root.is_dir():
+        yield from _get_files_in_dirs((installed_package_root,), excluded_dir_names, set())
+    elif installed_package_root.is_file():
+        yield installed_package_root
+    else:
+        return
+
+
+def _get_source_paths(
+    project_dir: Path,
+    all_path_dependencies: List[Path],
+    installed_package_root: Path,
+    excluded_dir_names: Set[str],
+) -> Iterator[Path]:
+    excluded_dirs = set()
+    if installed_package_root.is_dir():
+        excluded_dirs.add(installed_package_root)
+
+    return _get_files_in_dirs(
+        itertools.chain((project_dir,), all_path_dependencies),
+        excluded_dir_names,
+        excluded_dirs,
+    )
+
+
 def _get_files_in_dirs(
     dir_paths: Iterable[Path],
     excluded_dir_names: Set[str],
     excluded_dir_paths: Set[Path],
-) -> Iterable[Path]:
+) -> Iterator[Path]:
     for dir_path in dir_paths:
         for path in dir_path.iterdir():
             if path.is_dir():

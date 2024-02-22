@@ -4,7 +4,6 @@ import importlib.abc
 import importlib.machinery
 import importlib.util
 import logging
-import math
 import os
 import shutil
 import sys
@@ -12,7 +11,7 @@ import time
 from importlib.machinery import ExtensionFileLoader, ModuleSpec
 from pathlib import Path
 from types import ModuleType
-from typing import Optional, Sequence, Tuple, Union
+from typing import Iterator, Optional, Sequence, Tuple, Union
 
 from maturin_import_hook._building import (
     BuildCache,
@@ -20,6 +19,7 @@ from maturin_import_hook._building import (
     LockedBuildCache,
     build_unpacked_wheel,
     find_maturin,
+    get_installation_freshness,
     maturin_output_has_warnings,
     run_maturin,
 )
@@ -59,6 +59,10 @@ class MaturinRustFileImporter(importlib.abc.MetaPathFinder):
         if self._maturin_path is None:
             self._maturin_path = find_maturin((1, 4, 0), (2, 0, 0))
         return self._maturin_path
+
+    def get_source_files(self, source_path: Path) -> Iterator[Path]:
+        """this method can be overridden to rebuild when changes are made to files other than the main rs file"""
+        yield source_path
 
     def generate_project_for_single_rust_file(
         self,
@@ -204,19 +208,19 @@ class MaturinRustFileImporter(importlib.abc.MetaPathFinder):
         if extension_module_path is None:
             return None, "already built module not found"
 
-        extension_module_mtime = extension_module_path.stat().st_mtime
-        if extension_module_mtime < source_path.stat().st_mtime:
-            return None, "module is out of date"
-
         build_status = build_cache.get_build_status(source_path)
         if build_status is None:
             return None, "no build status found"
         if build_status.source_path != source_path:
             return None, "source path in build status does not match the project dir"
-        if not math.isclose(build_status.build_mtime, extension_module_mtime):
-            return None, "installed package mtime does not match build status mtime"
         if build_status.maturin_args != settings.to_args():
             return None, "current maturin args do not match the previous build"
+
+        freshness = get_installation_freshness(
+            self.get_source_files(source_path), (extension_module_path,), build_status
+        )
+        if not freshness.is_fresh:
+            return None, freshness.reason
 
         spec = _get_spec_for_extension_module(module_path, extension_module_path)
         if spec is None:

@@ -2,15 +2,18 @@ import dataclasses
 import json
 import logging
 import multiprocessing
+import os
 import platform
 import re
 import subprocess
 import sys
 import tempfile
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
+from io import StringIO
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, TypeVar
 
 script_dir = Path(__file__).resolve().parent
 log = logging.getLogger(__name__)
@@ -250,3 +253,31 @@ def run_concurrent_python(
             log.info("output:\n%s", o.output)
 
     return outputs
+
+
+def get_file_times(path: Path) -> Tuple[float, float]:
+    s = path.stat()
+    return (s.st_atime, s.st_mtime)
+
+
+def set_file_times_recursive(path: Path, times: Tuple[float, float]) -> None:
+    for p in path.rglob("*"):
+        os.utime(p, times)
+
+
+def set_file_times(path: Path, times: Tuple[float, float]) -> None:
+    os.utime(path, times)
+
+
+@contextmanager
+def capture_logs(log: Optional[logging.Logger] = None, level: int = logging.INFO) -> Iterator[StringIO]:
+    out = StringIO()
+    if log is None:
+        log = logging.getLogger()
+    handler = logging.StreamHandler(out)
+    handler.setLevel(level)
+    log.addHandler(handler)
+    try:
+        yield out
+    finally:
+        log.removeHandler(handler)

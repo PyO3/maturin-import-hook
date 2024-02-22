@@ -1,22 +1,28 @@
 import hashlib
 import logging
 import platform
+import re
 import subprocess
-import time
 from pathlib import Path
+from typing import List, cast
 
 import pytest
-from maturin_import_hook._building import BuildCache, BuildStatus
+from maturin_import_hook._building import BuildCache, BuildStatus, Freshness, get_installation_freshness
 from maturin_import_hook._resolve_project import _ProjectResolveError, _resolve_project, _TomlFile
-from maturin_import_hook.project_importer import (
-    _get_installed_package_mtime,
-    _get_project_mtime,
-    _load_dist_info,
-    _uri_to_path,
-)
+from maturin_import_hook.error import ImportHookError
+from maturin_import_hook.project_importer import _load_dist_info, _uri_to_path
 from maturin_import_hook.settings import MaturinBuildSettings, MaturinDevelopSettings, MaturinSettings
 
-from .common import TEST_CRATES_DIR, ResolvedPackage, get_string_between, map_optional, resolved_packages
+from .common import (
+    TEST_CRATES_DIR,
+    ResolvedPackage,
+    capture_logs,
+    get_file_times,
+    get_string_between,
+    map_optional,
+    resolved_packages,
+    set_file_times,
+)
 
 log = logging.getLogger(__name__)
 
@@ -112,123 +118,173 @@ def test_settings() -> None:
     ]
 
 
-class TestGetProjectMtime:
-    def test_missing_extension(self, tmp_path: Path) -> None:
-        assert _get_project_mtime(tmp_path, [], tmp_path / "missing", set()) is None
-        extension_dir = tmp_path / "extension"
-        extension_dir.mkdir()
-        assert _get_project_mtime(tmp_path, [], extension_dir, set()) is None
+class TestGetInstallationFreshness:
+    def _build_status(self, mtime: float) -> BuildStatus:
+        return BuildStatus(build_mtime=mtime, source_path=cast(Path, None), maturin_args=[], maturin_output="")
 
-    def test_missing_path_dep(self, tmp_path: Path) -> None:
-        (tmp_path / "extension").touch()
-        project_mtime = _get_project_mtime(tmp_path, [tmp_path / "missing"], tmp_path / "extension", set())
-        assert project_mtime is None
+    def _build_status_for_file(self, path: Path) -> BuildStatus:
+        return BuildStatus(
+            build_mtime=path.stat().st_mtime, source_path=cast(Path, None), maturin_args=[], maturin_output=""
+        )
 
-    def test_simple(self, tmp_path: Path) -> None:
-        src_dir = tmp_path / "src"
-        src_dir.mkdir()
-        (src_dir / "source_file.rs").touch()
-        _small_sleep()
-        (tmp_path / "extension_module").touch()
-        project_mtime = _get_project_mtime(tmp_path, [], tmp_path / "extension_module", set())
-        assert project_mtime == (tmp_path / "extension_module").stat().st_mtime
+    def test_missing_installation(self, tmp_path: Path) -> None:
+        (tmp_path / "source").touch()
+        (tmp_path / "install").touch()
+        s = self._build_status_for_file(tmp_path / "install")
 
-        (tmp_path / "extension_module").unlink()
-        (tmp_path / "extension_module").mkdir()
-        (tmp_path / "extension_module/stuff").touch()
+        freshness = get_installation_freshness([tmp_path / "source"], [], s)
+        assert freshness == Freshness(False, "no installed files found", None, None)
 
-        # if the extension module is a directory then it should be excluded from the project mtime
-        # calculation as it may contain pycache files that are generated after installation
-        project_mtime = _get_project_mtime(tmp_path, [], tmp_path / "extension_module", set())
-        assert project_mtime == (src_dir / "source_file.rs").stat().st_mtime
+        with capture_logs() as cap:
+            freshness = get_installation_freshness([tmp_path / "source"], [tmp_path / "missing"], s)
+        assert freshness == Freshness(False, "failed to read installed files", None, None)
+        expected_logs = (
+            "error reading installed file mtimes: "
+            f"FileNotFoundError(2, 'No such file or directory') ({tmp_path / 'missing'})\n"
+        )
+        assert cap.getvalue() == expected_logs
 
-        project_mtime = _get_project_mtime(tmp_path, [], tmp_path / "extension_module", {"src"})
-        assert project_mtime is None
+        with capture_logs() as cap:
+            freshness = get_installation_freshness(
+                [tmp_path / "source"], [tmp_path / "install", tmp_path / "missing"], s
+            )
+        assert freshness == Freshness(False, "failed to read installed files", None, None)
+        assert cap.getvalue() == expected_logs
 
-    def test_simple_path_dep(self, tmp_path: Path) -> None:
-        project_a = tmp_path / "a"
-        project_b = tmp_path / "b"
-        project_a.mkdir()
-        project_b.mkdir()
+    def test_missing_source(self, tmp_path: Path) -> None:
+        (tmp_path / "source").touch()
+        (tmp_path / "install").touch()
+        s = self._build_status_for_file(tmp_path / "install")
 
-        (project_a / "source").touch()
-        _small_sleep()
-        extension_module = project_a / "extension"
-        extension_module.touch()
-        _small_sleep()
-        (project_b / "source").touch()
-        _small_sleep()
+        with pytest.raises(ImportHookError, match="no source files found"):
+            get_installation_freshness([], [tmp_path / "install"], s)
 
-        project_mtime = _get_project_mtime(project_a, [project_b], extension_module, set())
-        assert project_mtime == (project_b / "source").stat().st_mtime
+        expected_error = re.escape(
+            "error reading source file mtimes: "
+            f"FileNotFoundError(2, 'No such file or directory') ({tmp_path / 'missing'})"
+        )
+        with pytest.raises(ImportHookError, match=expected_error):
+            get_installation_freshness([tmp_path / "missing"], [tmp_path / "install"], s)
 
-        extension_module.touch()
-        project_mtime = _get_project_mtime(project_a, [project_b], extension_module, set())
-        assert project_mtime == (project_a / "extension").stat().st_mtime
+        with pytest.raises(ImportHookError, match=expected_error):
+            get_installation_freshness([tmp_path / "source", tmp_path / "missing"], [tmp_path / "install"], s)
 
-    def test_extension_module_dir_with_some_newer(self, tmp_path: Path) -> None:
-        src_dir = tmp_path / "src"
-        extension_dir = tmp_path / "extension_module"
-        src_dir.mkdir()
-        extension_dir.mkdir()
+    def test_mismatched_build_status(self, tmp_path: Path) -> None:
+        (tmp_path / "source").touch()
+        (tmp_path / "install").touch()
+        s = self._build_status(0)
 
-        (extension_dir / "a").touch()
-        _small_sleep()
-        (src_dir / "source").touch()
-        _small_sleep()
-        (extension_dir / "b").touch()
+        freshness = get_installation_freshness([tmp_path / "source"], [tmp_path / "install"], s)
+        assert freshness == Freshness(
+            False, "installation mtime does not match build status mtime", tmp_path / "install", None
+        )
 
-        extension_mtime = _get_installed_package_mtime(extension_dir, set())
-        assert extension_mtime == (extension_dir / "a").stat().st_mtime
-        project_mtime = _get_project_mtime(tmp_path, [], extension_dir, set())
-        assert project_mtime == (src_dir / "source").stat().st_mtime
+        (tmp_path / "install_1").touch()
+        (tmp_path / "install_2").touch()
+        _set_strictly_ordered_mtimes([tmp_path / "install_1", tmp_path / "install_2", tmp_path / "source"])
 
-        _small_sleep()
-        (extension_dir / "a").touch()
-        extension_mtime = _get_installed_package_mtime(extension_dir, set())
-        assert extension_mtime == (extension_dir / "b").stat().st_mtime
-        project_mtime = _get_project_mtime(tmp_path, [], extension_dir, set())
-        assert project_mtime == (src_dir / "source").stat().st_mtime
+        s = self._build_status_for_file(tmp_path / "install_2")
 
-    def test_extension_module_dir_with_newer_pycache(self, tmp_path: Path) -> None:
-        mixed_src_dir = tmp_path / "mixed_dir"
-        mixed_src_dir.mkdir()
+        freshness = get_installation_freshness(
+            [tmp_path / "source"], [tmp_path / "install_1", tmp_path / "install_2"], s
+        )
+        assert freshness == Freshness(
+            False, "installation mtime does not match build status mtime", tmp_path / "install_1", None
+        )
 
-        (mixed_src_dir / "__init__.py").touch()
-        _small_sleep()
-        extension_path = mixed_src_dir / "extension"
-        extension_path.touch()  # project is built
-        _small_sleep()
-        (mixed_src_dir / "__pycache__").mkdir()  # pycache is created later when loaded
-        (mixed_src_dir / "__pycache__/some_cache.pyc").touch()
+    def test_read_error(self, tmp_path: Path) -> None:
+        unreadable_dir = tmp_path / "unreadable"
+        unreadable_dir.mkdir()
+        (unreadable_dir / "source").touch()
 
-        extension_mtime = _get_installed_package_mtime(extension_path, set())
-        assert extension_mtime == extension_path.stat().st_mtime
-        project_mtime = _get_project_mtime(tmp_path, [], extension_path, set())
-        assert project_mtime == (mixed_src_dir / "__pycache__/some_cache.pyc").stat().st_mtime
+        (unreadable_dir / "install").touch()
+        unreadable_status = self._build_status_for_file(unreadable_dir / "install")
 
-        project_mtime = _get_project_mtime(tmp_path, [], extension_path, {"__pycache__"})
-        assert project_mtime == extension_path.stat().st_mtime
+        readable_dir = tmp_path / "readable"
+        readable_dir.mkdir()
 
-    def test_extension_outside_project_source(self, tmp_path: Path) -> None:
-        project_dir = tmp_path / "project"
-        installed_dir = tmp_path / "site-packages"
-        project_dir.mkdir()
-        installed_dir.mkdir()
+        (readable_dir / "install").touch()
+        readable_status = self._build_status_for_file(readable_dir / "install")
 
-        (project_dir / "source").touch()
-        _small_sleep()
-        extension_path = installed_dir / "extension"
-        extension_path.touch()
+        try:
+            unreadable_dir.chmod(0o000)
 
-        project_mtime = _get_project_mtime(project_dir, [], extension_path, set())
-        assert project_mtime == (project_dir / "source").stat().st_mtime
+            with capture_logs() as cap:
+                freshness = get_installation_freshness([], [unreadable_dir / "install"], unreadable_status)
+            expected_logs = (
+                "error reading installed file mtimes: "
+                f"PermissionError(13, 'Permission denied') ({unreadable_dir / 'install'})\n"
+            )
+            assert cap.getvalue() == expected_logs
+            assert freshness == Freshness(False, "failed to read installed files", None, None)
 
-        _small_sleep()
-        (project_dir / "source").touch()
+            expected_error = re.escape(
+                "error reading source file mtimes: "
+                f"PermissionError(13, 'Permission denied') ({unreadable_dir / 'source'})"
+            )
+            with pytest.raises(ImportHookError, match=expected_error):
+                get_installation_freshness([unreadable_dir / "source"], [readable_dir / "install"], readable_status)
 
-        project_mtime = _get_project_mtime(project_dir, [], extension_path, set())
-        assert project_mtime == (project_dir / "source").stat().st_mtime
+        finally:
+            # make sure that the temporary files can be cleaned up after the test
+            unreadable_dir.chmod(0o777)
+
+    def test_equal_mtime(self, tmp_path: Path) -> None:
+        (tmp_path / "source").touch()
+        (tmp_path / "install").touch()
+        set_file_times(tmp_path / "source", get_file_times(tmp_path / "install"))
+        s = self._build_status_for_file(tmp_path / "install")
+
+        assert (tmp_path / "source").stat().st_mtime == (tmp_path / "install").stat().st_mtime
+
+        freshness = get_installation_freshness([tmp_path / "source"], [tmp_path / "install"], s)
+        assert freshness == Freshness(
+            False, "installation may be out of date", tmp_path / "install", tmp_path / "source"
+        )
+
+    def test_simple_cases(self, tmp_path: Path) -> None:
+        source_1 = tmp_path / "source_1"
+        source_2 = tmp_path / "source_2"
+        install_1 = tmp_path / "install_1"
+        install_2 = tmp_path / "install_2"
+        source_1.touch()
+        source_2.touch()
+        install_1.touch()
+        install_2.touch()
+
+        _set_strictly_ordered_mtimes([source_1, source_2, install_1, install_2])
+        s = self._build_status_for_file(tmp_path / "install_1")
+        freshness = get_installation_freshness([source_1, source_2], [install_1, install_2], s)
+        assert freshness == Freshness(True, "", install_1, source_2)
+
+        _set_strictly_ordered_mtimes([source_1, install_1, source_2, install_2])
+        s = self._build_status_for_file(tmp_path / "install_1")
+        freshness = get_installation_freshness([source_1, source_2], [install_1, install_2], s)
+        assert freshness == Freshness(False, "installation is out of date", install_1, source_2)
+
+        _set_strictly_ordered_mtimes([install_1, install_2, source_1, source_2])
+        s = self._build_status_for_file(tmp_path / "install_1")
+        freshness = get_installation_freshness([source_1, source_2], [install_1, install_2], s)
+        assert freshness == Freshness(False, "installation is out of date", install_1, source_2)
+
+
+def test_set_strictly_ordered_mtimes(tmp_path: Path) -> None:
+    a = tmp_path / "a"
+    b = tmp_path / "b"
+    c = tmp_path / "c"
+    d = tmp_path / "d"
+    a.touch()
+    b.touch()
+    c.touch()
+    d.touch()
+    _set_strictly_ordered_mtimes([a, c, b, d])
+    assert a.stat().st_mtime < c.stat().st_mtime < b.stat().st_mtime < d.stat().st_mtime
+
+
+def _set_strictly_ordered_mtimes(paths: List[Path]) -> None:
+    atime, mtime = get_file_times(paths[0])
+    for i, p in enumerate(reversed(paths)):
+        set_file_times(p, (atime, mtime - i))
 
 
 @pytest.mark.parametrize("project_name", sorted(resolved_packages().keys()))
@@ -348,7 +404,3 @@ def test_get_string_between() -> None:
     assert get_string_between("11aaabbbccc11", "xxx", "ccc") is None
     assert get_string_between("11aaabbbccc11", "aaa", "xxx") is None
     assert get_string_between("11aaabbbccc11", "xxx", "xxx") is None
-
-
-def _small_sleep() -> None:
-    time.sleep(0.05)

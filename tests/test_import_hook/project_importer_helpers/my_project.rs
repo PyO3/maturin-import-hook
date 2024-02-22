@@ -5,7 +5,8 @@ fn get_num() -> usize {
     if cfg!(feature = "large_number") {
         100
     } else {
-        10
+        let num = 10;
+        num
     }
 }
 
