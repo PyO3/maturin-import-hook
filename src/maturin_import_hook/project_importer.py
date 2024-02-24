@@ -12,10 +12,11 @@ import tempfile
 import time
 import urllib.parse
 import urllib.request
+from abc import ABC, abstractmethod
 from importlib.machinery import ExtensionFileLoader, ModuleSpec, PathFinder
 from pathlib import Path
 from types import ModuleType
-from typing import Iterable, Iterator, List, Optional, Sequence, Set, Tuple, Union
+from typing import ClassVar, Iterator, List, Optional, Sequence, Set, Tuple, Union
 
 from maturin_import_hook._building import (
     BuildCache,
@@ -42,19 +43,26 @@ __all__ = [
     "install",
     "uninstall",
     "IMPORTER",
-    "DEFAULT_EXCLUDED_DIR_NAMES",
+    "ProjectFileSearcher",
+    "DefaultProjectFileSearcher",
 ]
 
 
-DEFAULT_EXCLUDED_DIR_NAMES = {
-    "__pycache__",
-    "target",
-    "dist",
-    ".git",
-    "venv",
-    ".venv",
-    ".pytest_cache",
-}
+class ProjectFileSearcher(ABC):
+    @abstractmethod
+    def get_source_paths(
+        self,
+        project_dir: Path,
+        all_path_dependencies: List[Path],
+        installed_package_root: Path,
+    ) -> Iterator[Path]:
+        """find the files corresponding to the source code of the given project"""
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_installation_paths(self, installed_package_root: Path) -> Iterator[Path]:
+        """find the files corresponding to the installed files of the given project"""
+        raise NotImplementedError
 
 
 class MaturinProjectImporter(importlib.abc.MetaPathFinder):
@@ -64,22 +72,22 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
         self,
         *,
         settings: Optional[MaturinSettings] = None,
+        file_searcher: Optional[ProjectFileSearcher] = None,
         build_dir: Optional[Path] = None,
         lock_timeout_seconds: Optional[float] = 120,
         enable_reloading: bool = True,
         enable_automatic_installation: bool = True,
         force_rebuild: bool = False,
-        excluded_dir_names: Optional[Set[str]] = None,
         show_warnings: bool = True,
     ) -> None:
         self._resolver = ProjectResolver()
         self._settings = settings
+        self._file_searcher = file_searcher if file_searcher is not None else DefaultProjectFileSearcher()
         self._build_cache = BuildCache(build_dir, lock_timeout_seconds)
         self._enable_reloading = enable_reloading
         self._enable_automatic_installation = enable_automatic_installation
         self._force_rebuild = force_rebuild
         self._show_warnings = show_warnings
-        self._excluded_dir_names = DEFAULT_EXCLUDED_DIR_NAMES if excluded_dir_names is None else excluded_dir_names
         self._maturin_path: Optional[Path] = None
         self._reload_tmp_path: Optional[Path] = None
 
@@ -263,9 +271,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
             if installed_package_root is None:
                 logger.error("could not get installed package root")
             else:
-                mtime = get_installation_mtime(
-                    _get_installation_paths(installed_package_root, self._excluded_dir_names)
-                )
+                mtime = get_installation_mtime(self._file_searcher.get_installation_paths(installed_package_root))
                 if mtime is None:
                     logger.error("could not get installed package mtime")
                 else:
@@ -306,9 +312,9 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
         if build_status.maturin_args != settings.to_args():
             return None, "current maturin args do not match the previous build"
 
-        installed_paths = _get_installation_paths(installed_package_root, self._excluded_dir_names)
-        source_paths = _get_source_paths(
-            project_dir, resolved.all_path_dependencies, installed_package_root, self._excluded_dir_names
+        installed_paths = self._file_searcher.get_installation_paths(installed_package_root)
+        source_paths = self._file_searcher.get_source_paths(
+            project_dir, resolved.all_path_dependencies, installed_package_root
         )
         freshness = get_installation_freshness(source_paths, installed_paths, build_status)
         if not freshness.is_fresh:
@@ -446,44 +452,138 @@ def _find_extension_module(dir_path: Path, module_name: str, *, require: bool = 
     return None
 
 
-def _get_installation_paths(installed_package_root: Path, excluded_dir_names: Set[str]) -> Iterator[Path]:
-    if installed_package_root.is_dir():
-        yield from _get_files_in_dirs((installed_package_root,), excluded_dir_names, set())
-    elif installed_package_root.is_file():
-        yield installed_package_root
-    else:
-        return
+class DefaultProjectFileSearcher(ProjectFileSearcher):
+    """the default file searcher implements some lightweight and conservative filtering to ignore most unwanted parts
+    of a source tree.
+    """
 
+    # based on
+    # - https://github.com/github/gitignore/blob/main/Rust.gitignore
+    # - https://github.com/github/gitignore/blob/main/Python.gitignore
+    # - https://github.com/jupyter/notebook/blob/main/.gitignore
+    DEFAULT_SOURCE_EXCLUDED_DIR_NAMES: ClassVar[Set[str]] = {
+        ".cache",
+        ".env",
+        ".git",
+        ".idea",
+        ".ipynb_checkpoints",
+        ".mypy_cache",
+        ".nox",
+        ".pyre",
+        ".pytest_cache",
+        ".ropeproject",
+        ".spyderproject",
+        ".spyproject",
+        ".tox",
+        ".venv",
+        ".vscode",
+        ".yarn",
+        "__pycache__",
+        "dist",
+        "env",
+        "node_modules",
+        "target",
+        "venv",
+    }
+    DEFAULT_SOURCE_EXCLUDED_DIR_MARKERS: ClassVar[Set[str]] = {
+        "CACHEDIR.TAG",  # https://bford.info/cachedir/
+    }
+    DEFAULT_SOURCE_EXCLUDED_FILE_EXTENSIONS: ClassVar[Set[str]] = {
+        ".so",
+        ".pyc",
+    }
 
-def _get_source_paths(
-    project_dir: Path,
-    all_path_dependencies: List[Path],
-    installed_package_root: Path,
-    excluded_dir_names: Set[str],
-) -> Iterator[Path]:
-    excluded_dirs = set()
-    if installed_package_root.is_dir():
-        excluded_dirs.add(installed_package_root)
+    def __init__(
+        self,
+        *,
+        source_excluded_dir_names: Optional[Set[str]] = None,
+        source_excluded_dir_markers: Optional[Set[str]] = None,
+        source_excluded_file_extensions: Optional[Set[str]] = None,
+    ) -> None:
+        """
+        Args:
+            source_excluded_dir_names: when searching for source files,
+                ignore (do not recurse into) directories with these names (case sensitive)
+            source_excluded_dir_markers: when searching for source files,
+                ignore (do not recurse into) directories that contain a file with this name (case sensitive)
+            source_excluded_file_extensions: when searching for source files,
+                ignore files with these file extensions (case insensitive) (values should include the leading `.`)
+        """
+        super().__init__()
+        self._source_excluded_dir_names = (
+            source_excluded_dir_names
+            if source_excluded_dir_names is not None
+            else self.DEFAULT_SOURCE_EXCLUDED_DIR_NAMES
+        )
+        self._source_excluded_dir_markers = (
+            source_excluded_dir_markers
+            if source_excluded_dir_markers is not None
+            else self.DEFAULT_SOURCE_EXCLUDED_DIR_MARKERS
+        )
+        self._source_excluded_file_extensions = (
+            source_excluded_file_extensions
+            if source_excluded_file_extensions is not None
+            else self.DEFAULT_SOURCE_EXCLUDED_FILE_EXTENSIONS
+        )
 
-    return _get_files_in_dirs(
-        itertools.chain((project_dir,), all_path_dependencies),
-        excluded_dir_names,
-        excluded_dirs,
-    )
+    def get_source_paths(
+        self,
+        project_dir: Path,
+        all_path_dependencies: List[Path],
+        installed_package_root: Path,
+    ) -> Iterator[Path]:
+        excluded_dirs = set()
+        excluded_files = set()
+        if installed_package_root.is_dir():
+            excluded_dirs.add(installed_package_root)
+        else:
+            excluded_files.add(installed_package_root)
 
+        for root_dir in itertools.chain((project_dir,), all_path_dependencies):
+            for path in self.get_files_in_dir(
+                root_dir,
+                excluded_dirs,
+                self._source_excluded_dir_names,
+                self._source_excluded_dir_markers,
+                self._source_excluded_file_extensions,
+            ):
+                if path not in excluded_files:
+                    yield path
 
-def _get_files_in_dirs(
-    dir_paths: Iterable[Path],
-    excluded_dir_names: Set[str],
-    excluded_dir_paths: Set[Path],
-) -> Iterator[Path]:
-    for dir_path in dir_paths:
-        for path in dir_path.iterdir():
-            if path.is_dir():
-                if path.name not in excluded_dir_names and path not in excluded_dir_paths:
-                    yield from _get_files_in_dirs((path,), excluded_dir_names, excluded_dir_paths)
+    def get_installation_paths(self, installed_package_root: Path) -> Iterator[Path]:
+        if installed_package_root.is_dir():
+            yield from self.get_files_in_dir(installed_package_root, set(), {"__pycache__"}, set(), {".pyc"})
+        elif installed_package_root.is_file():
+            yield installed_package_root
+        else:
+            return
+
+    def get_files_in_dir(
+        self,
+        root_path: Path,
+        ignore_dirs: Set[Path],
+        excluded_dir_names: Set[str],
+        excluded_dir_markers: Set[str],
+        excluded_file_extensions: Set[str],
+    ) -> Iterator[Path]:
+        if root_path.name in excluded_dir_names:
+            return
+        if not root_path.exists():
+            raise FileNotFoundError(root_path)
+
+        for dir_str, dirs, files in os.walk(root_path, topdown=True):
+            dir_path = Path(dir_str)
+            include_dir = dir_path not in ignore_dirs and not any(dir_name in excluded_dir_markers for dir_name in dirs)
+
+            if include_dir:
+                dirs[:] = sorted(dir_name for dir_name in dirs if dir_name not in excluded_dir_names)
+                files.sort()
+                for filename in files:
+                    file_path = dir_path / filename
+                    if file_path.suffix.lower() not in excluded_file_extensions:
+                        yield file_path
             else:
-                yield path
+                dirs.clear()  # do not recurse further into this directory
 
 
 IMPORTER: Optional[MaturinProjectImporter] = None
@@ -494,34 +594,29 @@ def install(
     settings: Optional[MaturinSettings] = None,
     build_dir: Optional[Path] = None,
     enable_reloading: bool = True,
-    enable_automatic_installation: bool = True,
     force_rebuild: bool = False,
-    excluded_dir_names: Optional[Set[str]] = None,
     lock_timeout_seconds: Optional[float] = 120,
     show_warnings: bool = True,
+    file_searcher: Optional[ProjectFileSearcher] = None,
+    enable_automatic_installation: bool = True,
 ) -> MaturinProjectImporter:
     """Install an import hook for automatically rebuilding editable installed maturin projects.
 
-    :param settings: settings corresponding to flags passed to maturin.
-
-    :param build_dir: where to put the compiled artifacts. defaults to `$MATURIN_BUILD_DIR`,
-        `sys.exec_prefix / 'maturin_build_cache'` or
-        `$HOME/.cache/maturin_build_cache/<interpreter_hash>` in order of preference
-
-    :param enable_reloading: enable workarounds to allow the extension modules to be reloaded with `importlib.reload()`
-
-    :param enable_automatic_installation: whether to install detected packages using the import hook even if they
-        are not already installed into the virtual environment or are installed in non-editable mode.
-
-    :param force_rebuild: whether to always rebuild and skip checking whether anything has changed
-
-    :param excluded_dir_names: directory names to exclude when determining whether a project has changed
-        and so whether the extension module needs to be rebuilt
-
-    :param lock_timeout_seconds: a lock is required to prevent projects from being built concurrently.
-        If the lock is not released before this timeout is reached the import hook stops waiting and aborts
-
-    :param show_warnings: whether to show compilation warnings
+    Args:
+        settings: settings corresponding to flags passed to maturin.
+        build_dir: where to put the compiled artifacts. defaults to `$MATURIN_BUILD_DIR`,
+            `sys.exec_prefix / 'maturin_build_cache'` or
+            `$HOME/.cache/maturin_build_cache/<interpreter_hash>` in order of preference.
+        enable_reloading: enable workarounds to allow the extension modules to be reloaded with `importlib.reload()`
+        force_rebuild: whether to always rebuild and skip checking whether anything has changed
+        excluded_dir_names: directory names to exclude when determining whether a project has changed
+            and so whether the extension module needs to be rebuilt
+        lock_timeout_seconds: a lock is required to prevent projects from being built concurrently.
+            If the lock is not released before this timeout is reached the import hook stops waiting and aborts
+        show_warnings: whether to show compilation warnings
+        file_searcher: an object that specifies how to search for the source files and installed files of a project.
+        enable_automatic_installation: whether to install detected packages using the import hook even if they
+            are not already installed into the virtual environment or are installed in non-editable mode.
 
     """
     global IMPORTER
@@ -532,11 +627,11 @@ def install(
         settings=settings,
         build_dir=build_dir,
         enable_reloading=enable_reloading,
-        enable_automatic_installation=enable_automatic_installation,
         force_rebuild=force_rebuild,
-        excluded_dir_names=excluded_dir_names,
         lock_timeout_seconds=lock_timeout_seconds,
         show_warnings=show_warnings,
+        file_searcher=file_searcher,
+        enable_automatic_installation=enable_automatic_installation,
     )
     sys.meta_path.insert(0, IMPORTER)
     return IMPORTER

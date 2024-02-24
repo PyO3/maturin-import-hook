@@ -395,20 +395,16 @@ def install(
     """Install the 'rust file' importer to import .rs files as though
     they were regular python modules.
 
-    :param settings: settings corresponding to flags passed to maturin.
-
-    :param build_dir: where to put the compiled artifacts. defaults to `$MATURIN_BUILD_DIR`,
-        `sys.exec_prefix / 'maturin_build_cache'` or
-        `$HOME/.cache/maturin_build_cache/<interpreter_hash>` in order of preference
-
-    :param enable_reloading: enable workarounds to allow the extension modules to be reloaded with `importlib.reload()`
-
-    :param force_rebuild: whether to always rebuild and skip checking whether anything has changed
-
-    :param lock_timeout_seconds: a lock is required to prevent projects from being built concurrently.
-        If the lock is not released before this timeout is reached the import hook stops waiting and aborts
-
-    :param show_warnings: whether to show compilation warnings
+    Args:
+        settings: settings corresponding to flags passed to maturin.
+        build_dir: where to put the compiled artifacts. defaults to `$MATURIN_BUILD_DIR`,
+            `sys.exec_prefix / 'maturin_build_cache'` or
+            `$HOME/.cache/maturin_build_cache/<interpreter_hash>` in order of preference
+        enable_reloading: enable workarounds to allow the extension modules to be reloaded with `importlib.reload()`
+        force_rebuild: whether to always rebuild and skip checking whether anything has changed
+        lock_timeout_seconds: a lock is required to prevent projects from being built concurrently.
+            If the lock is not released before this timeout is reached the import hook stops waiting and aborts
+        show_warnings: whether to show compilation warnings
 
     """
     global IMPORTER

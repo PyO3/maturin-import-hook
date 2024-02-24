@@ -11,7 +11,7 @@ from typing import Iterator, Tuple
 
 import pytest
 from maturin_import_hook._building import fix_direct_url
-from maturin_import_hook.project_importer import _get_installation_paths, _get_source_paths, _load_dist_info
+from maturin_import_hook.project_importer import DefaultProjectFileSearcher, _load_dist_info
 
 from .common import (
     IMPORT_HOOK_HEADER,
@@ -519,9 +519,8 @@ def test_low_resolution_mtime(workspace: Path) -> None:
     extension_path = Path((workspace / "extension_path.txt").read_text())
 
     def set_mtimes_equal() -> None:
-        oldest_package_path = min(
-            (p for p in _get_installation_paths(package_path, {"__pycache__"})), key=lambda p: p.stat().st_mtime
-        )
+        s = DefaultProjectFileSearcher()
+        oldest_package_path = min((p for p in s.get_installation_paths(package_path)), key=lambda p: p.stat().st_mtime)
         times = get_file_times(oldest_package_path)
         set_file_times_recursive(package_path, times)
         set_file_times_recursive(source_root, times)
@@ -1115,100 +1114,142 @@ class TestLogging:
         check_match(output, pattern, flags=re.MULTILINE)
 
 
-class TestGetSourceFiles:
-    def test_missing_extension(self, workspace: Path) -> None:
-        assert list(_get_source_paths(workspace, [], workspace / "missing", set())) == []
-        extension_dir = workspace / "extension"
-        extension_dir.mkdir()
-        assert list(_get_source_paths(workspace, [], extension_dir, set())) == []
+class TestDefaultProjectFileSearcher:
+    class TestGetSourcePaths:
+        def test_missing_extension(self, workspace: Path) -> None:
+            s = DefaultProjectFileSearcher(
+                source_excluded_dir_names=set(),
+                source_excluded_dir_markers=set(),
+                source_excluded_file_extensions=set(),
+            )
+            assert list(s.get_source_paths(workspace, [], workspace / "missing")) == []
+            extension_dir = workspace / "extension"
+            extension_dir.mkdir()
+            assert list(s.get_source_paths(workspace, [], extension_dir)) == []
 
-    def test_missing_paths(self, workspace: Path) -> None:
-        (workspace / "extension").touch()
-        with pytest.raises(FileNotFoundError):
-            list(_get_source_paths(workspace, [workspace / "missing"], workspace / "extension", set()))
+        def test_missing_paths(self, workspace: Path) -> None:
+            s = DefaultProjectFileSearcher(
+                source_excluded_dir_names=set(),
+                source_excluded_dir_markers=set(),
+                source_excluded_file_extensions=set(),
+            )
+            (workspace / "extension").touch()
+            with pytest.raises(FileNotFoundError):
+                list(s.get_source_paths(workspace, [workspace / "missing"], workspace / "extension"))
 
-        with pytest.raises(FileNotFoundError):
-            list(_get_source_paths(workspace / "missing", [], workspace / "extension", set()))
+            with pytest.raises(FileNotFoundError):
+                list(s.get_source_paths(workspace / "missing", [], workspace / "extension"))
 
-    def test_simple(self, workspace: Path) -> None:
-        src_dir = workspace / "src"
-        src_dir.mkdir()
-        source_file_path = src_dir / "source_file.rs"
-        source_file_path.touch()
-        (workspace / "extension_module").touch()
-        paths = set(_get_source_paths(workspace, [], workspace / "extension_module", set()))
-        assert paths == {source_file_path, workspace / "extension_module"}
+        def test_simple(self, workspace: Path) -> None:
+            s = DefaultProjectFileSearcher(
+                source_excluded_dir_names=set(),
+                source_excluded_dir_markers=set(),
+                source_excluded_file_extensions=set(),
+            )
+            src_dir = workspace / "src"
+            src_dir.mkdir()
+            source_file_path = src_dir / "source_file.rs"
+            source_file_path.touch()
+            (workspace / "extension_module").touch()
+            paths = set(s.get_source_paths(workspace, [], workspace / "extension_module"))
+            assert paths == {source_file_path}
 
-        (workspace / "extension_module").unlink()
-        (workspace / "extension_module").mkdir()
-        (workspace / "extension_module/stuff").touch()
+            (workspace / "extension_module").unlink()
+            (workspace / "extension_module").mkdir()
+            (workspace / "extension_module/stuff").touch()
 
-        # if the extension module is a directory then it should be excluded from the project mtime
-        # calculation as it may contain pycache files that are generated after installation
-        paths = set(_get_source_paths(workspace, [], workspace / "extension_module", set()))
-        assert paths == {source_file_path}
+            paths = set(s.get_source_paths(workspace, [], workspace / "extension_module"))
+            assert paths == {source_file_path}
 
-        paths = set(_get_source_paths(workspace, [], workspace / "extension_module", {"src"}))
-        assert paths == set()
+            s = DefaultProjectFileSearcher(
+                source_excluded_dir_names={"src"},
+                source_excluded_dir_markers=set(),
+                source_excluded_file_extensions=set(),
+            )
+            paths = set(s.get_source_paths(workspace, [], workspace / "extension_module"))
+            assert paths == set()
 
-    def test_simple_path_dep(self, workspace: Path) -> None:
-        project_a = workspace / "a"
-        project_b = workspace / "b"
-        project_a.mkdir()
-        project_b.mkdir()
+        def test_simple_path_dep(self, workspace: Path) -> None:
+            project_a = workspace / "a"
+            project_b = workspace / "b"
+            project_a.mkdir()
+            project_b.mkdir()
 
-        (project_a / "source.py").touch()
-        extension_dir = project_a / "extension"
-        extension_dir.mkdir()
-        (extension_dir / "extension.so").touch()
-        (project_b / "source.py").touch()
-        (project_b / "__pycache__").mkdir()
-        (project_b / "__pycache__/source.pyc").touch()
+            (project_a / "source.py").touch()
+            extension_dir = project_a / "extension"
+            extension_dir.mkdir()
+            (extension_dir / "extension.so").touch()
+            (project_b / "source.py").touch()
+            (project_b / "__pycache__").mkdir()
+            (project_b / "__pycache__/source.pyc").touch()
 
-        paths = set(_get_source_paths(project_a, [project_b], extension_dir, set()))
-        assert paths == {project_a / "source.py", project_b / "source.py", project_b / "__pycache__/source.pyc"}
+            s = DefaultProjectFileSearcher(
+                source_excluded_dir_names=set(),
+                source_excluded_dir_markers=set(),
+                source_excluded_file_extensions=set(),
+            )
+            paths = set(s.get_source_paths(project_a, [project_b], extension_dir))
+            assert paths == {project_a / "source.py", project_b / "source.py", project_b / "__pycache__/source.pyc"}
 
-        paths = set(_get_source_paths(project_a, [project_b], extension_dir, {"__pycache__"}))
-        assert paths == {project_a / "source.py", project_b / "source.py"}
+            s = DefaultProjectFileSearcher(
+                source_excluded_dir_names={"__pycache__"},
+                source_excluded_dir_markers=set(),
+                source_excluded_file_extensions=set(),
+            )
+            paths = set(s.get_source_paths(project_a, [project_b], extension_dir))
+            assert paths == {project_a / "source.py", project_b / "source.py"}
 
-    def test_extension_outside_project_source(self, tmp_path: Path) -> None:
-        project_dir = tmp_path / "project"
-        installed_dir = tmp_path / "site-packages"
-        project_dir.mkdir()
-        installed_dir.mkdir()
+            s = DefaultProjectFileSearcher(
+                source_excluded_dir_names=set(),
+                source_excluded_dir_markers=set(),
+                source_excluded_file_extensions={".pyc"},
+            )
+            paths = set(s.get_source_paths(project_a, [project_b], extension_dir))
+            assert paths == {project_a / "source.py", project_b / "source.py"}
 
-        (project_dir / "source").touch()
-        extension_path = installed_dir / "extension"
-        extension_path.touch()
+        def test_extension_outside_project_source(self, tmp_path: Path) -> None:
+            project_dir = tmp_path / "project"
+            installed_dir = tmp_path / "site-packages"
+            project_dir.mkdir()
+            installed_dir.mkdir()
 
-        paths = set(_get_source_paths(project_dir, [], extension_path, set()))
-        assert paths == {project_dir / "source"}
+            (project_dir / "source").touch()
+            extension_path = installed_dir / "extension"
+            extension_path.touch()
 
+            s = DefaultProjectFileSearcher(
+                source_excluded_dir_names=set(),
+                source_excluded_dir_markers=set(),
+                source_excluded_file_extensions=set(),
+            )
+            paths = set(s.get_source_paths(project_dir, [], extension_path))
+            assert paths == {project_dir / "source"}
 
-def test_get_installation_paths(workspace: Path) -> None:
-    assert set(_get_installation_paths(workspace, set())) == set()
-    assert set(_get_installation_paths(workspace / "missing", set())) == set()
+    def test_get_installation_paths(self, workspace: Path) -> None:
+        s = DefaultProjectFileSearcher(
+            source_excluded_dir_names={"foo"},
+            source_excluded_dir_markers=set(),
+            source_excluded_file_extensions={".so"},
+        )
+        assert set(s.get_installation_paths(workspace)) == set()
+        assert set(s.get_installation_paths(workspace / "missing")) == set()
 
-    (workspace / "extension.so").touch()
-    (workspace / "empty_subdir").mkdir()
-    (workspace / "subdir").mkdir()
-    (workspace / "subdir/file.py").touch()
-    (workspace / "subdir/__pycache__").mkdir()
-    (workspace / "subdir/__pycache__/file.pyc").touch()
-    (workspace / "__pycache__").mkdir()
-    (workspace / "__pycache__/__init__.pyc").touch()
+        (workspace / "extension.so").touch()
+        (workspace / "misc").touch()
+        (workspace / "empty_subdir").mkdir()
+        (workspace / "subdir").mkdir()
+        (workspace / "subdir/file.py").touch()
+        (workspace / "subdir/__pycache__").mkdir()
+        (workspace / "subdir/__pycache__/file.pyc").touch()
+        (workspace / "__pycache__").mkdir()
+        (workspace / "__pycache__/__init__.pyc").touch()
 
-    assert set(_get_installation_paths(workspace / "extension.so", set())) == {workspace / "extension.so"}
-    assert set(_get_installation_paths(workspace, set())) == {
-        workspace / "extension.so",
-        workspace / "__pycache__/__init__.pyc",
-        workspace / "subdir/file.py",
-        workspace / "subdir/__pycache__/file.pyc",
-    }
-    assert set(_get_installation_paths(workspace, {"missing", "__pycache__"})) == {
-        workspace / "extension.so",
-        workspace / "subdir/file.py",
-    }
+        assert set(s.get_installation_paths(workspace / "extension.so")) == {workspace / "extension.so"}
+        assert set(s.get_installation_paths(workspace)) == {
+            workspace / "extension.so",
+            workspace / "misc",
+            workspace / "subdir/file.py",
+        }
 
 
 def _up_to_date_message(project_name: str) -> str:
