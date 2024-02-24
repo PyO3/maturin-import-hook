@@ -61,17 +61,17 @@ def install(
         rust_file_importer.install(
             settings=settings,
             build_dir=build_dir,
+            enable_reloading=enable_reloading,
             force_rebuild=force_rebuild,
             lock_timeout_seconds=lock_timeout_seconds,
             show_warnings=show_warnings,
-            # TODO(matt): enable reloading
         )
     if enable_project_importer:
         project_importer.install(
             settings=settings,
             build_dir=build_dir,
-            enable_automatic_installation=enable_automatic_installation,
             enable_reloading=enable_reloading,
+            enable_automatic_installation=enable_automatic_installation,
             force_rebuild=force_rebuild,
             excluded_dir_names=excluded_dir_names,
             lock_timeout_seconds=lock_timeout_seconds,

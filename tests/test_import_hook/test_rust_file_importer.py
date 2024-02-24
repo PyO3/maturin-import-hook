@@ -1,11 +1,13 @@
 import re
 import shutil
 from pathlib import Path
+from textwrap import dedent
 from typing import Tuple
 
 from .common import (
     check_match,
     get_file_times,
+    get_string_between,
     missing_entrypoint_error_message_pattern,
     remove_ansii_escape_characters,
     run_concurrent_python,
@@ -239,13 +241,353 @@ def test_rebuild_on_settings_change(workspace: Path) -> None:
     assert "SUCCESS" in output4
 
 
+class TestReload:
+    """test that importlib.reload() can be used to reload modules imported by the import hook
+
+    The tests are organised to strike a balance between having many tests for individual behaviours and bundling
+    checks together to reduce the time spent compiling.
+
+    see docs/reloading.md for details
+    """
+
+    @staticmethod
+    def _create_reload_module(output_dir: Path) -> Path:
+        (output_dir / "__init__.py").touch()
+        module_path = output_dir / "my_module.rs"
+        shutil.copy(helpers_dir / "reload_template.rs", module_path)
+        shutil.copy(helpers_dir / "reload_helper.py", output_dir / "reload_helper.py")
+        other_module = dedent("""\
+        import my_module
+        from my_module import get_num
+        import logging
+
+        def get_twice_num_direct():
+            return get_num() * 2
+
+        def get_twice_num_indirect():
+            return my_module.get_num() * 2
+
+        logging.info('other module initialised')
+        """)
+        (output_dir / "other_module.py").write_text(other_module)
+
+        return module_path
+
+    def test_basic_reload(self, workspace: Path) -> None:
+        """test several properties of reloading rs-file modules with the import hook active
+
+        - import styles
+            - `import ...` style import
+                - top level
+                - extension module
+            - `from ... import ...` style import
+                - top level
+                - extension module
+            - duplicate reference to module
+        - module initialisation
+        - classes
+            - types becoming incompatible after reloading
+        - calling reload
+            - after making changes
+            - after no changes
+        """
+        module_path = self._create_reload_module(workspace)
+        output, _ = run_python(
+            [str(helpers_dir / "reload_helper.py"), str(module_path), "_test_basic_reload"], cwd=workspace
+        )
+        info = "\n".join(line for line in output.splitlines() if "[INFO]" in line)
+
+        assert "SUCCESS" in output
+
+        e = re.escape
+
+        # This checks that the INFO level logs are exactly these messages (with nothing in between).
+        # This verifies that rebuilds and module initialisation are behaving as expected
+        expected_info_parts = [
+            e("reload_helper [INFO] initial import start"),
+            e('maturin_import_hook [INFO] building "my_module"'),  # because: no build status
+            'maturin_import_hook \\[INFO\\] rebuilt and loaded module "my_module" in [0-9.]+s',
+            e("root [INFO] my_module extension module initialised"),
+            e("reload_helper [INFO] initial import finish"),
+            e("root [INFO] comparing Integer instances a and b"),
+            e("root [INFO] comparing Integer instances a and c"),
+            e("reload_helper [INFO] modifying module"),
+            e("reload_helper [INFO] reload 1 start"),
+            e('maturin_import_hook [INFO] building "my_module"'),
+            'maturin_import_hook \\[INFO\\] rebuilt and loaded module "my_module" in [0-9.]+s',
+            e("root [INFO] my_module extension module initialised"),
+            e("reload_helper [INFO] reload 1 finish"),
+            e("root [INFO] comparing Integer instances d and e"),
+            e("reload_helper [INFO] reload 2 start"),
+            e(
+                "root [INFO] my_module extension module initialised"
+            ),  # note: this is different from the package importer
+            e("reload_helper [INFO] reload 2 finish"),
+            e("reload_helper [INFO] modifying module"),
+            e("reload_helper [INFO] reload 3 start"),
+            e('maturin_import_hook [INFO] building "my_module"'),
+            'maturin_import_hook \\[INFO\\] rebuilt and loaded module "my_module" in [0-9.]+s',
+            e("root [INFO] my_module extension module initialised"),
+            e("reload_helper [INFO] reload 3 finish"),
+            e("reload_helper [INFO] SUCCESS"),
+        ]
+        expected_info_pattern = "\n".join(line for line in expected_info_parts if line)
+        check_match(info, expected_info_pattern, flags=re.MULTILINE)
+
+        # these checks ensure that the internals of the import hook are performing the expected actions
+        initial_import = get_string_between(output, "initial import start", "initial import finish")
+        assert initial_import is not None
+        assert 'MaturinRustFileImporter searching for "my_module"\n' in initial_import
+        assert 'building "my_module"' in initial_import
+
+        assert 'handling reload of "my_module"' not in initial_import
+
+        reload_1 = get_string_between(output, "reload 1 start", "reload 1 finish")
+        assert reload_1 is not None
+        assert 'MaturinRustFileImporter searching for "my_module" (reload)' in reload_1
+        assert 'building "my_module"' in reload_1
+        assert 'handling reload of "my_module"' in reload_1
+
+        assert 'module up to date: "my_module"' not in reload_1
+
+        reload_2 = get_string_between(output, "reload 2 start", "reload 2 finish")
+        assert reload_2 is not None
+        assert 'MaturinRustFileImporter searching for "my_module" (reload)' in reload_2
+        assert 'module up to date: "my_module"' in reload_2
+        assert 'handling reload of "my_module"' in reload_2
+
+        assert 'building "my_module"' not in reload_2
+
+        reload_3 = get_string_between(output, "reload 3 start", "reload 3 finish")
+        assert reload_3 is not None
+        assert 'MaturinRustFileImporter searching for "my_module" (reload)' in reload_3
+        assert 'building "my_module"' in reload_3
+        assert 'handling reload of "my_module"' in reload_3
+
+        assert 'module up to date: "my_module"' not in reload_3
+
+    def test_globals(self, workspace: Path) -> None:
+        """tests properties of global variables initialised in python and rust modules when the package is reloaded
+
+        - module types:
+            - root module
+            - extension module
+            - python submodule
+        - properties tested
+            - __path__
+            - adding new global
+            - global initialised once
+            - modifying mutable global
+            - assigning to immutable global
+        - reload without changes
+        - reload with changes changes
+        """
+        module_path = self._create_reload_module(workspace)
+        output, _ = run_python(
+            [str(helpers_dir / "reload_helper.py"), str(module_path), "_test_globals"], cwd=workspace
+        )
+        info = "\n".join(line for line in output.splitlines() if "[INFO]" in line)
+
+        assert "SUCCESS" in output
+
+        e = re.escape
+
+        expected_info_parts = [
+            e("reload_helper [INFO] initial import start"),
+            e('maturin_import_hook [INFO] building "my_module"'),
+            'maturin_import_hook \\[INFO\\] rebuilt and loaded module "my_module" in [0-9.]+s',
+            e("root [INFO] my_module extension module initialised"),
+            e("reload_helper [INFO] initial import finish"),
+            e("reload_helper [INFO] checking extension module"),
+            e("reload_helper [INFO] reload 1 start"),
+            e("root [INFO] my_module extension module initialised"),
+            e("reload_helper [INFO] reload 2 finish"),
+            e("reload_helper [INFO] checking extension module"),
+            e("reload_helper [INFO] modifying module"),
+            e("reload_helper [INFO] reload 2 start"),
+            e('maturin_import_hook [INFO] building "my_module"'),
+            'maturin_import_hook \\[INFO\\] rebuilt and loaded module "my_module" in [0-9.]+s',
+            e("root [INFO] my_module extension module initialised"),
+            e("reload_helper [INFO] reload 2 finish"),
+            e("reload_helper [INFO] checking extension module"),
+            e("reload_helper [INFO] SUCCESS"),
+        ]
+        expected_info_pattern = "\n".join(line for line in expected_info_parts if line)
+        check_match(info, expected_info_pattern, flags=re.MULTILINE)
+
+    def test_other_module(self, workspace: Path) -> None:
+        module_path = self._create_reload_module(workspace)
+        output, _ = run_python(
+            [str(helpers_dir / "reload_helper.py"), str(module_path), "_test_other_module"], cwd=workspace
+        )
+
+        assert "SUCCESS" in output
+
+        e = re.escape
+
+        expected_parts = [
+            e("reload_helper [INFO] initial import start"),
+            e('maturin_import_hook [DEBUG] module "my_module" will be rebuilt because: already built module not found'),
+            e("root [INFO] my_module extension module initialised"),
+            e("root [INFO] other module initialised"),
+            e("reload_helper [INFO] initial import finish"),
+            e("reload_helper [INFO] modifying module"),
+            e("reload_helper [INFO] reload 1 start"),
+            e('maturin_import_hook [INFO] building "my_module"'),
+            e('maturin_import_hook [DEBUG] handling reload of "my_module"'),
+            'maturin_import_hook \\[INFO\\] rebuilt and loaded module "my_module" in [0-9.]+s',
+            e("root [INFO] my_module extension module initialised"),
+            e("reload_helper [INFO] reload 1 finish"),
+            e("reload_helper [INFO] reload 2 start"),
+            e("root [INFO] other module initialised"),
+            e("reload_helper [INFO] reload 2 finish"),
+            e("reload_helper [INFO] SUCCESS\n"),
+        ]
+        expected_pattern = ".*".join(part for part in expected_parts if part)
+        check_match(output, expected_pattern, flags=re.MULTILINE | re.DOTALL)
+
+    def test_reload_without_import_hook(self, workspace: Path) -> None:
+        """test when reload is used without support from the import hook"""
+        module_path = self._create_reload_module(workspace)
+        output, _ = run_python(
+            [str(helpers_dir / "reload_helper.py"), str(module_path), "_test_reload_without_import_hook"], cwd=workspace
+        )
+        assert "SUCCESS" in output
+
+        e = re.escape
+
+        expected_parts = [
+            e("reload_helper [INFO] initial import start"),
+            e("reload_helper [INFO] module not found"),
+            e("reload_helper [INFO] installing import hook"),
+            e('module "my_module" will be rebuilt because: already built module not found'),
+            e("root [INFO] my_module extension module initialised"),
+            e("reload_helper [INFO] initial import finish"),
+            e("reload_helper [INFO] reload module start"),
+            e('maturin_import_hook [DEBUG] module "my_module" is already loaded and enable_reloading=False'),
+            e("reload_helper [INFO] reload module finish"),
+            e("reload_helper [INFO] modifying module"),
+            e("reload_helper [INFO] reload module start"),
+            e('maturin_import_hook [DEBUG] module "my_module" is already loaded and enable_reloading=False'),
+            e("reload_helper [INFO] reload module finish"),
+            e("reload_helper [INFO] uninstalling import hook"),
+            e("reload_helper [INFO] reload module start"),
+            e("reload_helper [INFO] module not found"),
+            e("reload_helper [INFO] reload module finish"),
+            e("reload_helper [INFO] SUCCESS\n"),
+        ]
+        expected_pattern = ".*".join(part for part in expected_parts if part)
+        check_match(output, expected_pattern, flags=re.MULTILINE | re.DOTALL)
+
+    def test_compilation_error(self, workspace: Path) -> None:
+        module_path = self._create_reload_module(workspace)
+        output, _ = run_python(
+            [str(helpers_dir / "reload_helper.py"), str(module_path), "_test_compilation_error"], cwd=workspace
+        )
+        assert "SUCCESS" in output
+
+        e = re.escape
+
+        expected_parts = [
+            e("reload_helper [INFO] initial import start"),
+            e('maturin_import_hook [DEBUG] MaturinRustFileImporter searching for "my_module"'),
+            e('maturin_import_hook [INFO] building "my_module"'),
+            'maturin_import_hook \\[INFO\\] rebuilt and loaded module "my_module" in [0-9.]+s',
+            e("root [INFO] my_module extension module initialised"),
+            e("reload_helper [INFO] initial import finish"),
+            e("reload_helper [INFO] modifying module"),
+            e("reload_helper [INFO] reload start"),
+            e('maturin_import_hook [DEBUG] MaturinRustFileImporter searching for "my_module" (reload)'),
+            e('maturin_import_hook [INFO] building "my_module"'),
+            e("expected expression, found `;`"),
+            e("maturin failed"),
+            e("reload_helper [INFO] reload failed"),
+            e("reload_helper [INFO] reload finish"),
+            e("reload_helper [INFO] modifying module"),
+            e("reload_helper [INFO] reload start"),
+            e('maturin_import_hook [DEBUG] MaturinRustFileImporter searching for "my_module" (reload)'),
+            e('maturin_import_hook [INFO] building "my_module"'),
+            'maturin_import_hook \\[INFO\\] rebuilt and loaded module "my_module" in [0-9.]+s',
+            e("root [INFO] my_module extension module initialised"),
+            e("reload_helper [INFO] reload finish"),
+            e("reload_helper [INFO] SUCCESS\n"),
+        ]
+        expected_pattern = ".*".join(line for line in expected_parts if line)
+        check_match(output, expected_pattern, flags=re.MULTILINE | re.DOTALL)
+
+    def test_pickling(self, workspace: Path) -> None:
+        """test the classes that can be pickled behave as expected when the module is reloaded"""
+        module_path = self._create_reload_module(workspace)
+        output, _ = run_python(
+            [str(helpers_dir / "reload_helper.py"), str(module_path), "_test_pickling"], cwd=workspace
+        )
+
+        assert "SUCCESS" in output
+
+        e = re.escape
+
+        expected_parts = [
+            e("reload_helper [INFO] initial import start"),
+            e('maturin_import_hook [DEBUG] MaturinRustFileImporter searching for "my_module"'),
+            e('maturin_import_hook [INFO] building "my_module"'),
+            'maturin_import_hook \\[INFO\\] rebuilt and loaded module "my_module" in [0-9.]+s',
+            e("root [INFO] my_module extension module initialised"),
+            e("reload_helper [INFO] initial import finish"),
+            e("reload_helper [INFO] modifying module"),
+            e("reload_helper [INFO] reload start"),
+            e('maturin_import_hook [DEBUG] MaturinRustFileImporter searching for "my_module" (reload)'),
+            e('maturin_import_hook [INFO] building "my_module"'),
+            'maturin_import_hook \\[INFO\\] rebuilt and loaded module "my_module" in [0-9.]+s',
+            e("root [INFO] my_module extension module initialised"),
+            e("reload_helper [INFO] reload finish"),
+            e("reload_helper [INFO] SUCCESS\n"),
+        ]
+        expected_pattern = ".*".join(line for line in expected_parts if line)
+        check_match(output, expected_pattern, flags=re.MULTILINE | re.DOTALL)
+
+    def test_submodule(self, workspace: Path) -> None:
+        module_path = self._create_reload_module(workspace)
+        output, _ = run_python(
+            [str(helpers_dir / "reload_helper.py"), str(module_path), "_test_submodule"], cwd=workspace
+        )
+
+        assert "SUCCESS" in output
+
+        e = re.escape
+
+        expected_parts = [
+            e("reload_helper [INFO] initial import start"),
+            e('maturin_import_hook [DEBUG] MaturinRustFileImporter searching for "my_module"'),
+            e('maturin_import_hook [INFO] building "my_module"'),
+            'maturin_import_hook \\[INFO\\] rebuilt and loaded module "my_module" in [0-9.]+s',
+            e("root [INFO] my_module extension module initialised"),
+            e("reload_helper [INFO] initial import finish"),
+            e("reload_helper [INFO] modifying module"),
+            e("reload_helper [INFO] reload start"),
+            e('maturin_import_hook [DEBUG] MaturinRustFileImporter searching for "my_module" (reload)'),
+            e('maturin_import_hook [INFO] building "my_module"'),
+            'maturin_import_hook \\[INFO\\] rebuilt and loaded module "my_module" in [0-9.]+s',
+            e("root [INFO] my_module extension module initialised"),
+            e("reload_helper [INFO] reload finish"),
+            e("reload_helper [INFO] reload start"),
+            e("reload_helper [INFO] reload failed"),
+            e("reload_helper [INFO] reload finish"),
+            e("reload_helper [INFO] SUCCESS\n"),
+        ]
+        expected_pattern = ".*".join(line for line in expected_parts if line)
+        check_match(output, expected_pattern, flags=re.MULTILINE | re.DOTALL)
+
+
 class TestLogging:
     """test the desired messages are visible to the user in the default logging configuration."""
 
-    def _create_clean_package(self, package_path: Path) -> Tuple[Path, Path]:
+    def _create_clean_package(self, package_path: Path, *, reload_helper: bool = False) -> Tuple[Path, Path]:
         package_path.mkdir()
         rs_path = Path(shutil.copy(helpers_dir / "my_script_1.rs", package_path / "my_script.rs"))
-        py_path = Path(shutil.copy(helpers_dir / "logging_helper.py", package_path / "loader.py"))
+        if reload_helper:
+            py_path = Path(shutil.copy(helpers_dir / "logging_reload_helper.py", package_path / "reload_helper.py"))
+        else:
+            py_path = Path(shutil.copy(helpers_dir / "logging_helper.py", package_path / "helper.py"))
         return rs_path, py_path
 
     def test_maturin_detection(self, workspace: Path) -> None:
@@ -338,6 +680,27 @@ class TestLogging:
             "SUCCESS\n"
         )
         check_match(output2, pattern, flags=re.MULTILINE | re.DOTALL)
+
+    def test_reload(self, workspace: Path) -> None:
+        rs_path, py_path = self._create_clean_package(workspace / "package", reload_helper=True)
+
+        output1, _ = run_python([str(py_path)], workspace)
+        output1 = remove_ansii_escape_characters(output1)
+        pattern = (
+            "initial import start\n"
+            'building "my_script"\n'
+            'rebuilt and loaded module "my_script" in [0-9.]+s\n'
+            "initial import finish\n"
+            "reload start\n"
+            'building "my_script"\n'
+            'rebuilt and loaded module "my_script" in [0-9.]+s\n'
+            "reload finish\n"
+            "reload start\n"
+            "reload finish\n"
+            "get_num 10\n"
+            "SUCCESS\n"
+        )
+        check_match(output1, pattern, flags=re.MULTILINE | re.DOTALL)
 
     def test_reset_logger_without_configuring(self, workspace: Path) -> None:
         """If reset_logger is called then by default logging level INFO is not printed

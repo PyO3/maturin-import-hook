@@ -158,17 +158,20 @@ def main() -> None:
         "--workspace",
         type=Path,
         default=script_dir / "test_workspace",
-        help="the location to store the caches and outputs",
+        help="the location to store the caches and outputs (defaults to test_workspace)",
     )
 
     parser.add_argument("--lld", action="store_true", help="use lld for linking (generally faster than the default).")
     parser.add_argument(
         "--profile",
         type=Path,
+        required=False,
         help="collect profiling statistics. Note that the majority of the time is spent waiting on subprocesses",
     )
 
-    parser.add_argument("test_specification", nargs="?", help="the directory, file or test to run")
+    parser.add_argument(
+        "test_specification", nargs="?", help="the directory, file or test to run (defaults to running all tests)"
+    )
     args = parser.parse_args()
 
     if args.test_specification is None:

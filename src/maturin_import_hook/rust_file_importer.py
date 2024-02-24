@@ -7,11 +7,12 @@ import logging
 import os
 import shutil
 import sys
+import tempfile
 import time
 from importlib.machinery import ExtensionFileLoader, ModuleSpec
 from pathlib import Path
 from types import ModuleType
-from typing import Iterator, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Iterator, Optional, Sequence, Tuple, Union
 
 from maturin_import_hook._building import (
     BuildCache,
@@ -39,16 +40,27 @@ class MaturinRustFileImporter(importlib.abc.MetaPathFinder):
         *,
         settings: Optional[MaturinSettings] = None,
         build_dir: Optional[Path] = None,
+        enable_reloading: bool = True,
         force_rebuild: bool = False,
         lock_timeout_seconds: Optional[float] = 120,
         show_warnings: bool = True,
     ) -> None:
         self._force_rebuild = force_rebuild
+        self._enable_reloading = enable_reloading
+        self._reload_tmp_path: Optional[Path] = None
         self._resolver = ProjectResolver()
         self._settings = settings
         self._build_cache = BuildCache(build_dir, lock_timeout_seconds)
         self._show_warnings = show_warnings
         self._maturin_path: Optional[Path] = None
+
+    def __del__(self) -> None:
+        if self._reload_tmp_path is not None:
+            logger.debug("removing temporary files used for reloading")
+            try:
+                shutil.rmtree(self._reload_tmp_path)
+            except OSError as e:
+                logger.debug("failed to remove temporary files: %r", e)
 
     def get_settings(self, module_path: str, source_path: Path) -> MaturinSettings:
         """This method can be overridden in subclasses to customize settings for specific projects."""
@@ -99,13 +111,16 @@ class MaturinRustFileImporter(importlib.abc.MetaPathFinder):
         path: Optional[Sequence[Union[str, bytes]]] = None,
         target: Optional[ModuleType] = None,
     ) -> Optional[ModuleSpec]:
-        if fullname in sys.modules:
-            return None
+        already_loaded = fullname in sys.modules
+        if already_loaded and not self._enable_reloading:
+            return self._handle_no_reload(fullname)
 
         start = time.perf_counter()
 
         if logger.isEnabledFor(logging.DEBUG):
-            logger.debug('%s searching for "%s"', type(self).__name__, fullname)
+            logger.debug(
+                '%s searching for "%s"%s', type(self).__name__, fullname, " (reload)" if already_loaded else ""
+            )
 
         is_top_level_import = path is None
         if is_top_level_import:
@@ -114,7 +129,7 @@ class MaturinRustFileImporter(importlib.abc.MetaPathFinder):
             assert path is not None
             search_paths = [Path(os.fsdecode(p)) for p in path]
 
-        module_name = fullname.split(".")[-1]
+        module_name = fullname.rpartition(".")[2]
 
         spec = None
         rebuilt = False
@@ -126,12 +141,62 @@ class MaturinRustFileImporter(importlib.abc.MetaPathFinder):
                     break
 
         if spec is not None:
+            if already_loaded and self._enable_reloading:
+                assert spec is not None
+                spec = self._handle_reload(fullname, spec)
+
             duration = time.perf_counter() - start
             if rebuilt:
                 logger.info('rebuilt and loaded module "%s" in %.3fs', fullname, duration)
             else:
                 logger.debug('loaded module "%s" in %.3fs', fullname, duration)
+
         return spec
+
+    def _handle_no_reload(self, module_path: str) -> Optional[ModuleSpec]:
+        module = sys.modules[module_path]
+        loader = getattr(module, "__loader__", None)
+        if isinstance(loader, _RustFileExtensionFileLoader):
+            logger.debug('module "%s" is already loaded and enable_reloading=False', module_path)
+            # need to return a spec otherwise the reload will fail because unlike the project import hook,
+            # this module cannot be found without support from the hook
+            return getattr(module, "__spec__", None)
+        else:
+            # module not managed by this hook
+            return None
+
+    def _handle_reload(self, module_path: str, spec: ModuleSpec) -> ModuleSpec:
+        """trick python into reloading the extension module
+
+        see docs/reloading.md for full details
+        """
+        debug_log_enabled = logger.isEnabledFor(logging.DEBUG)
+        if debug_log_enabled:
+            logger.debug('handling reload of "%s"', module_path)
+
+        if self._reload_tmp_path is None:
+            self._reload_tmp_path = Path(tempfile.mkdtemp(prefix=type(self).__name__))
+
+        if spec.origin is None:
+            logger.error("module spec has no origin. cannot reload")
+            return spec
+        origin = Path(spec.origin).resolve()
+        tempfile.mkdtemp(prefix=module_path, dir=self._reload_tmp_path)
+        this_reload_dir = Path(tempfile.mkdtemp(prefix=module_path, dir=self._reload_tmp_path))
+        # if a symlink is used instead of a copy, if nothing has changed then the module is not re-initialised
+        reloaded_module_path = this_reload_dir / origin.name
+        shutil.copy(origin, reloaded_module_path)
+
+        if debug_log_enabled:
+            logger.debug("reloading %s as %s", reloaded_module_path, module_path)
+        reloaded_spec = importlib.util.spec_from_loader(
+            module_path, _ExtensionModuleReloader(module_path, str(origin), str(reloaded_module_path))
+        )
+        if reloaded_spec is None:
+            logger.error('failed to find module during reload "%s"', module_path)
+            return spec
+
+        return reloaded_spec
 
     def _import_rust_file(
         self, module_path: str, module_name: str, file_path: Path
@@ -254,8 +319,65 @@ def _find_extension_module(dir_path: Path, module_name: str, *, require: bool = 
     return None
 
 
+class _RustFileExtensionFileLoader(ExtensionFileLoader):
+    pass
+
+
 def _get_spec_for_extension_module(module_path: str, extension_module_path: Path) -> Optional[ModuleSpec]:
-    return importlib.util.spec_from_loader(module_path, ExtensionFileLoader(module_path, str(extension_module_path)))
+    return importlib.util.spec_from_loader(
+        module_path, _RustFileExtensionFileLoader(module_path, str(extension_module_path))
+    )
+
+
+class _ExtensionModuleReloader(_RustFileExtensionFileLoader):
+    """A loader that can be used to force a new version of an extension module to be loaded.
+
+    See docs/reloading.md for details
+    """
+
+    def __init__(self, name: str, path: str, reload_path: str) -> None:
+        # the module being reloaded will have its loader set to this object and __file__ set to the given path.
+        # here the choice is made to keep __file__ pointing to the main shared object, not the temporary one used
+        # only for reloading. The reload path can be accessed with `some_module.__loader__.reload_path` if necessary
+        super().__init__(name, path)
+        self.reload_path = reload_path
+
+    if TYPE_CHECKING:
+        name: str
+        path: str
+
+    def exec_module(self, module: ModuleType) -> None:
+        if sys.modules[self.name] is not module:
+            msg = f"failed to reload {self.name}. Module not in sys.modules"
+            raise ImportHookError(msg)
+
+        reload_name = f"maturin_import_hook._reload.{self.name}"
+        try:
+            logger.debug("creating new module then moving into %s", self.name)
+
+            loader = ExtensionFileLoader(reload_name, self.reload_path)
+            spec = importlib.util.spec_from_loader(reload_name, loader)
+            if spec is None:
+                msg = f"failed to create spec for {self.name} during reload"
+                raise ImportHookError(msg)
+
+            reloaded_module = importlib.util.module_from_spec(spec)
+            if reloaded_module is module:
+                msg = f"failed to create new module for {self.name} during reload"
+                raise ImportHookError(msg)
+
+            if sys.modules[self.name] is reloaded_module:
+                msg = f"expected a new module to be created for {self.name}"
+                raise ImportHookError(msg)
+
+            excluded_names = {"__name__", "__file__", "__package__", "__loader__", "__spec__"}
+
+            for k, v in reloaded_module.__dict__.items():
+                if k not in excluded_names:
+                    module.__dict__[k] = v
+        finally:
+            if reload_name in sys.modules:
+                del sys.modules[reload_name]
 
 
 IMPORTER: Optional[MaturinRustFileImporter] = None
@@ -265,6 +387,7 @@ def install(
     *,
     settings: Optional[MaturinSettings] = None,
     build_dir: Optional[Path] = None,
+    enable_reloading: bool = True,
     force_rebuild: bool = False,
     lock_timeout_seconds: Optional[float] = 120,
     show_warnings: bool = True,
@@ -277,6 +400,8 @@ def install(
     :param build_dir: where to put the compiled artifacts. defaults to `$MATURIN_BUILD_DIR`,
         `sys.exec_prefix / 'maturin_build_cache'` or
         `$HOME/.cache/maturin_build_cache/<interpreter_hash>` in order of preference
+
+    :param enable_reloading: enable workarounds to allow the extension modules to be reloaded with `importlib.reload()`
 
     :param force_rebuild: whether to always rebuild and skip checking whether anything has changed
 
@@ -293,6 +418,7 @@ def install(
     IMPORTER = MaturinRustFileImporter(
         settings=settings,
         build_dir=build_dir,
+        enable_reloading=enable_reloading,
         force_rebuild=force_rebuild,
         lock_timeout_seconds=lock_timeout_seconds,
         show_warnings=show_warnings,

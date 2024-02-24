@@ -67,13 +67,18 @@ def main() -> None:
     c_module.data["foo"] = 100
     c_module.data_init_once["foo"] = 200
 
+    def foo() -> int:
+        return 123
+
+    c_module.get_num = foo
+
     logging.info("reload start")
     _build_module()
     importlib.reload(c_module)
     logging.info("reload end")
 
     # as expected (see docs/reloading.md) reloading an extension module does not load new functionality
-    assert c_module.get_num() == 10
+    assert c_module.get_num() == 123  # reloading does not reset the state of the PyMethodDef object
     assert get_num() == 10
     # global variables of extension modules are not reset when reloaded
     # (because the module init function is not called)
