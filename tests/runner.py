@@ -5,6 +5,7 @@ import platform
 import shutil
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -15,6 +16,14 @@ script_dir = Path(__file__).resolve().parent
 
 log = logging.getLogger("runner")
 logging.basicConfig(format="[%(name)s] [%(levelname)s] %(message)s", level=logging.INFO)
+
+
+@dataclass
+class TestOptions:
+    test_specification: str
+    timeout: int
+    lld: bool
+    profile: Optional[Path]
 
 
 def _create_workspace(path: Path) -> None:
@@ -74,10 +83,7 @@ def _run_test_in_environment(
     venv_dir: Path,
     cache_dir: Path,
     report_output: Optional[Path],
-    test_specification: str,
-    *,
-    lld: bool,
-    profile: Optional[Path],
+    options: TestOptions,
 ) -> None:
     """
     Args:
@@ -97,7 +103,7 @@ def _run_test_in_environment(
     env["MATURIN_BUILD_DIR"] = str(cache_dir / "maturin_build_cache")
     env["CARGO_TARGET_DIR"] = str(cache_dir / "target")
 
-    if lld:
+    if options.lld:
         log.info("using lld")
         # https://stackoverflow.com/a/57817848
         env["RUSTFLAGS"] = "-C link-arg=-fuse-ld=lld"
@@ -105,15 +111,15 @@ def _run_test_in_environment(
     interpreter = _get_interpreter_path(venv_dir)
 
     cmd = [str(interpreter)]
-    if profile:
-        cmd += ["-m", "cProfile", "-o", str(profile.resolve())]
+    if options.profile:
+        cmd += ["-m", "cProfile", "-o", str(options.profile.resolve())]
 
     cmd += ["-m", "pytest"]
     if report_output is not None:
         cmd += ["--junit-xml", str(report_output.resolve()), "--junit-prefix", "maturin_import_hook"]
-    cmd += [test_specification]
+    cmd += [options.test_specification]
     log.info("running %s", subprocess.list2cmdline(cmd))
-    proc = subprocess.run(cmd, env=env, check=False)
+    proc = subprocess.run(cmd, env=env, check=False, timeout=options.timeout)
     if proc.returncode != 0:
         log.error("pytest failed with code %i", proc.returncode)
         sys.exit(proc.returncode)
@@ -131,7 +137,9 @@ def _create_html_report(venv_dir: Path, reports_dir: Path, output_path: Path) ->
 
 
 def _run_tests_serial(
-    workspace: Path, python: Path, test_specification: str, *, lld: bool, profile: Optional[Path]
+    workspace: Path,
+    python: Path,
+    options: TestOptions,
 ) -> None:
     venv_dir = workspace / "venv"
 
@@ -144,9 +152,7 @@ def _run_tests_serial(
 
     _create_test_venv(python, venv_dir)
     try:
-        _run_test_in_environment(
-            venv_dir, workspace / "cache", reports_dir / "results.xml", test_specification, lld=lld, profile=profile
-        )
+        _run_test_in_environment(venv_dir, workspace / "cache", reports_dir / "results.xml", options)
     finally:
         _create_html_report(venv_dir, reports_dir, report_path)
 
@@ -166,6 +172,13 @@ def main() -> None:
         help="the location to store the caches and outputs (defaults to test_workspace)",
     )
 
+    parser.add_argument(
+        "--timeout",
+        default=40 * 60,
+        type=int,
+        help="the total number of seconds to allow the tests to run for before aborting",
+    )
+
     parser.add_argument("--lld", action="store_true", help="use lld for linking (generally faster than the default).")
     parser.add_argument(
         "--profile",
@@ -183,7 +196,13 @@ def main() -> None:
         args.test_specification = "test_import_hook/"
 
     _create_workspace(args.workspace)
-    _run_tests_serial(args.workspace, args.python, args.test_specification, lld=args.lld, profile=args.profile)
+    options = TestOptions(
+        test_specification=args.test_specification,
+        timeout=args.timeout,
+        lld=args.lld,
+        profile=args.profile,
+    )
+    _run_tests_serial(args.workspace, args.python, options)
 
 
 if __name__ == "__main__":
