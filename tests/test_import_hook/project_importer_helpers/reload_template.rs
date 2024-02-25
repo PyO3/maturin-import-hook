@@ -64,11 +64,26 @@ impl PicklableInteger {
     }
 }
 
+#[pyfunction]
+fn get_str() -> String {
+    let string = "foo".to_string();
+    string
+}
+
+fn register_child_module(py: Python<'_>, parent_module: &PyModule) -> PyResult<()> {
+    let child_module = PyModule::new(py, "child")?;
+    child_module.add_wrapped(wrap_pyfunction!(get_str))?;
+    parent_module.add_submodule(child_module)?;
+    Ok(())
+}
+
 #[pymodule]
 fn my_project(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_wrapped(wrap_pyfunction!(get_num))?;
     m.add_class::<Integer>()?;
     m.add_class::<PicklableInteger>()?;
+
+    register_child_module(py, m)?;
 
     let data = PyDict::new(py);
     data.set_item("foo", 123)?;

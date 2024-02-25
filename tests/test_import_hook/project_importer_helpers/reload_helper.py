@@ -24,6 +24,12 @@ def _modify_project_num(num: int | str) -> None:
     rs_path.write_text(source)
 
 
+def _modify_project_str(string: str) -> None:
+    source = rs_path.read_text()
+    source = re.sub("let string = .*;", f'let string = "{string}".to_string();', source)
+    rs_path.write_text(source)
+
+
 def _test_basic_reload() -> None:
     maturin_import_hook.install()
 
@@ -457,6 +463,39 @@ def _test_pickling() -> None:
     log.info("SUCCESS")
 
 
+def _test_submodule() -> None:
+    maturin_import_hook.install()
+
+    log.info("initial import start")
+    import my_project  # type: ignore[missing-import]
+
+    log.info("initial import finish")
+
+    assert my_project.child.get_str() == "foo"
+
+    log.info("modifying project")
+    _modify_project_str("bar")
+
+    log.info("reload start")
+    importlib.reload(my_project)
+    log.info("reload finish")
+
+    assert my_project.child.get_str() == "bar"
+
+    log.info("reload start")
+    try:
+        importlib.reload(my_project.child)
+    except ImportError as e:
+        assert str(e) == "module child not in sys.modules"  # noqa: PT017
+        log.info("reload failed")
+    else:
+        msg = "expected import to fail"
+        raise AssertionError(msg)
+    log.info("reload finish")
+
+    log.info("SUCCESS")
+
+
 if action == "_test_basic_reload":
     _test_basic_reload()
 elif action == "_test_globals":
@@ -471,5 +510,7 @@ elif action == "_test_compilation_error":
     _test_compilation_error()
 elif action == "_test_pickling":
     _test_pickling()
+elif action == "_test_submodule":
+    _test_submodule()
 else:
     raise ValueError(action)

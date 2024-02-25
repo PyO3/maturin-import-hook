@@ -372,7 +372,7 @@ class TestReload:
         - module types:
             - root module
             - extension module
-            - python submodule
+            - python module
         - properties tested
             - __path__
             - adding new global

@@ -73,7 +73,7 @@ fn get_str() -> String {
 fn register_child_module(py: Python<'_>, parent_module: &PyModule) -> PyResult<()> {
     let child_module = PyModule::new(py, "child")?;
     child_module.add_wrapped(wrap_pyfunction!(get_str))?;
-    parent_module.add_submodule(child_module);
+    parent_module.add_submodule(child_module)?;
     Ok(())
 }
 

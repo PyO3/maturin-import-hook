@@ -723,7 +723,7 @@ class TestReload:
         - module types:
             - root module
             - extension module
-            - python submodule
+            - python module
         - properties tested
             - __path__
             - adding new global
@@ -949,6 +949,37 @@ class TestReload:
             e('maturin_import_hook [DEBUG] MaturinProjectImporter searching for "my_project" (reload)'),
             e('maturin_import_hook [INFO] building "my_project"'),
             'maturin_import_hook \\[INFO\\] rebuilt and loaded package "my_project" in [0-9.]+s',
+            e("reload_helper [INFO] reload finish"),
+            e("reload_helper [INFO] SUCCESS\n"),
+        ]
+        expected_pattern = ".*".join(line for line in expected_parts if line)
+        check_match(output, expected_pattern, flags=re.MULTILINE | re.DOTALL)
+
+    def test_submodule(self, workspace: Path) -> None:
+        _uninstall("my-project")
+        _project_dir, lib_path = self._create_reload_project(workspace, mixed=False)
+
+        output, _ = run_python([str(helpers_dir / "reload_helper.py"), str(lib_path), "_test_submodule"], cwd=workspace)
+        assert "SUCCESS" in output
+
+        e = re.escape
+
+        expected_parts = [
+            e("reload_helper [INFO] initial import start"),
+            e('maturin_import_hook [DEBUG] MaturinProjectImporter searching for "my_project"'),
+            e('maturin_import_hook [INFO] building "my_project"'),
+            'maturin_import_hook \\[INFO\\] rebuilt and loaded package "my_project" in [0-9.]+s',
+            e("root [INFO] my_project extension module initialised"),
+            e("reload_helper [INFO] initial import finish"),
+            e("reload_helper [INFO] modifying project"),
+            e("reload_helper [INFO] reload start"),
+            e('maturin_import_hook [DEBUG] MaturinProjectImporter searching for "my_project" (reload)'),
+            e('maturin_import_hook [INFO] building "my_project"'),
+            'maturin_import_hook \\[INFO\\] rebuilt and loaded package "my_project" in [0-9.]+s',
+            e("root [INFO] my_project extension module initialised"),
+            e("reload_helper [INFO] reload finish"),
+            e("reload_helper [INFO] reload start"),
+            e("reload_helper [INFO] reload failed"),
             e("reload_helper [INFO] reload finish"),
             e("reload_helper [INFO] SUCCESS\n"),
         ]
