@@ -177,7 +177,7 @@ class MaturinRustFileImporter(importlib.abc.MetaPathFinder):
         shutil.copy(origin, reloaded_module_path)
 
         if debug_log_enabled:
-            logger.debug("reloading %s as %s", reloaded_module_path, module_path)
+            logger.debug("reloading %s as '%s'", reloaded_module_path, module_path)
         reloaded_spec = importlib.util.spec_from_loader(
             module_path, _ExtensionModuleReloader(module_path, str(origin), str(reloaded_module_path))
         )

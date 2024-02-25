@@ -6,22 +6,22 @@ import maturin_import_hook
 
 maturin_import_hook.install()
 
-print("initial import start")
+print("initial import start", flush=True)
 import my_script  # type: ignore[missing-import]
 
-print("initial import finish")
+print("initial import finish", flush=True)
 
 script_path = Path("package/my_script.rs").resolve()
 assert script_path.exists()
 script_path.touch()  # trigger a re-build
 
-print("reload start")
+print("reload start", flush=True)
 importlib.reload(my_script)
-print("reload finish")
+print("reload finish", flush=True)
 
-print("reload start")
+print("reload start", flush=True)
 importlib.reload(my_script)
-print("reload finish")
+print("reload finish", flush=True)
 
-print("get_num", my_script.get_num())
-print("SUCCESS")
+print("get_num", my_script.get_num(), flush=True)
+print("SUCCESS", flush=True)

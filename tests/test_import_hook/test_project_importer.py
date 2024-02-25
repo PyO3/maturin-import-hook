@@ -926,9 +926,11 @@ class TestReload:
             e('maturin_import_hook [INFO] building "my_project"'),
             'maturin_import_hook \\[INFO\\] rebuilt and loaded package "my_project" in [0-9.]+s',
             e("reload_helper [INFO] reload finish"),
-            e("reload_helper [INFO] SUCCESS\n"),
+            e("reload_helper [INFO] SUCCESS"),
+            e("maturin_import_hook [DEBUG] removing temporary directory"),
+            "",  # end with anything
         ]
-        expected_pattern = ".*".join(line for line in expected_parts if line)
+        expected_pattern = ".*".join(line for line in expected_parts)
         check_match(output, expected_pattern, flags=re.MULTILINE | re.DOTALL)
 
     def test_pickling(self, workspace: Path) -> None:
@@ -954,9 +956,11 @@ class TestReload:
             e('maturin_import_hook [INFO] building "my_project"'),
             'maturin_import_hook \\[INFO\\] rebuilt and loaded package "my_project" in [0-9.]+s',
             e("reload_helper [INFO] reload finish"),
-            e("reload_helper [INFO] SUCCESS\n"),
+            e("reload_helper [INFO] SUCCESS"),
+            e("maturin_import_hook [DEBUG] removing temporary directory"),
+            "",  # end with anything
         ]
-        expected_pattern = ".*".join(line for line in expected_parts if line)
+        expected_pattern = ".*".join(line for line in expected_parts)
         check_match(output, expected_pattern, flags=re.MULTILINE | re.DOTALL)
 
     def test_submodule(self, workspace: Path) -> None:
@@ -985,9 +989,11 @@ class TestReload:
             e("reload_helper [INFO] reload start"),
             e("reload_helper [INFO] reload failed"),
             e("reload_helper [INFO] reload finish"),
-            e("reload_helper [INFO] SUCCESS\n"),
+            e("reload_helper [INFO] SUCCESS"),
+            e("maturin_import_hook [DEBUG] removing temporary directory"),
+            "",  # end with anything
         ]
-        expected_pattern = ".*".join(line for line in expected_parts if line)
+        expected_pattern = ".*".join(line for line in expected_parts)
         check_match(output, expected_pattern, flags=re.MULTILINE | re.DOTALL)
 
 

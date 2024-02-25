@@ -444,9 +444,11 @@ class TestReload:
             e("reload_helper [INFO] reload 2 start"),
             e("root [INFO] other module initialised"),
             e("reload_helper [INFO] reload 2 finish"),
-            e("reload_helper [INFO] SUCCESS\n"),
+            e("reload_helper [INFO] SUCCESS"),
+            e("maturin_import_hook [DEBUG] removing temporary directory"),
+            "",  # end with anything
         ]
-        expected_pattern = ".*".join(part for part in expected_parts if part)
+        expected_pattern = ".*".join(part for part in expected_parts)
         check_match(output, expected_pattern, flags=re.MULTILINE | re.DOTALL)
 
     def test_reload_without_import_hook(self, workspace: Path) -> None:
@@ -479,7 +481,7 @@ class TestReload:
             e("reload_helper [INFO] reload module finish"),
             e("reload_helper [INFO] SUCCESS\n"),
         ]
-        expected_pattern = ".*".join(part for part in expected_parts if part)
+        expected_pattern = ".*".join(part for part in expected_parts)
         check_match(output, expected_pattern, flags=re.MULTILINE | re.DOTALL)
 
     def test_compilation_error(self, workspace: Path) -> None:
@@ -513,9 +515,11 @@ class TestReload:
             'maturin_import_hook \\[INFO\\] rebuilt and loaded module "my_module" in [0-9.]+s',
             e("root [INFO] my_module extension module initialised"),
             e("reload_helper [INFO] reload finish"),
-            e("reload_helper [INFO] SUCCESS\n"),
+            e("reload_helper [INFO] SUCCESS"),
+            e("maturin_import_hook [DEBUG] removing temporary directory"),
+            "",  # end with anything
         ]
-        expected_pattern = ".*".join(line for line in expected_parts if line)
+        expected_pattern = ".*".join(line for line in expected_parts)
         check_match(output, expected_pattern, flags=re.MULTILINE | re.DOTALL)
 
     def test_pickling(self, workspace: Path) -> None:
@@ -543,9 +547,11 @@ class TestReload:
             'maturin_import_hook \\[INFO\\] rebuilt and loaded module "my_module" in [0-9.]+s',
             e("root [INFO] my_module extension module initialised"),
             e("reload_helper [INFO] reload finish"),
-            e("reload_helper [INFO] SUCCESS\n"),
+            e("reload_helper [INFO] SUCCESS"),
+            e("maturin_import_hook [DEBUG] removing temporary directory"),
+            "",  # end with anything
         ]
-        expected_pattern = ".*".join(line for line in expected_parts if line)
+        expected_pattern = ".*".join(line for line in expected_parts)
         check_match(output, expected_pattern, flags=re.MULTILINE | re.DOTALL)
 
     def test_submodule(self, workspace: Path) -> None:
@@ -575,9 +581,11 @@ class TestReload:
             e("reload_helper [INFO] reload start"),
             e("reload_helper [INFO] reload failed"),
             e("reload_helper [INFO] reload finish"),
-            e("reload_helper [INFO] SUCCESS\n"),
+            e("reload_helper [INFO] SUCCESS"),
+            e("maturin_import_hook [DEBUG] removing temporary directory"),
+            "",  # end with anything
         ]
-        expected_pattern = ".*".join(line for line in expected_parts if line)
+        expected_pattern = ".*".join(line for line in expected_parts)
         check_match(output, expected_pattern, flags=re.MULTILINE | re.DOTALL)
 
 
