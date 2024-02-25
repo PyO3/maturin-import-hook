@@ -116,11 +116,13 @@ def _test_globals() -> None:
     assert my_module.data["foo"] == 123
     assert my_module.data_init_once["foo"] == 123
     assert my_module.data_str == "foo"
+    assert my_module.get_global_num() == 0
 
     my_module.rust_extra_data = 12
     my_module.data["foo"] = 101
     my_module.data_init_once["foo"] = 102
     my_module.data_str = "bar"
+    my_module.set_global_num(100)
 
     log.info("reload 1 start")
     importlib.reload(my_module)
@@ -135,11 +137,13 @@ def _test_globals() -> None:
     assert my_module.data["foo"] == 123
     assert my_module.data_init_once["foo"] == 123
     assert my_module.data_str == "foo"
+    assert my_module.get_global_num() == 0
 
     my_module.rust_extra_data = 13
     my_module.data["foo"] = 91
     my_module.data_init_once["foo"] = 92
     my_module.data_str = "baz"
+    my_module.set_global_num(100)
 
     log.info("modifying module")
     _modify_module_num(20)
@@ -155,6 +159,7 @@ def _test_globals() -> None:
     assert my_module.data["foo"] == 123
     assert my_module.data_init_once["foo"] == 123
     assert my_module.data_str == "foo"
+    assert my_module.get_global_num() == 0
 
     log.info("SUCCESS")
 

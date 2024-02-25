@@ -133,6 +133,7 @@ def _test_globals() -> None:
     import my_project.other_module  # type: ignore[missing-import]
 
     root_path = my_project.__path__
+    root_file = my_project.__file__
     log.info("initial import finish")
 
     log.info("checking extension module")
@@ -141,22 +142,26 @@ def _test_globals() -> None:
     assert my_project.my_project.data["foo"] == 123
     assert my_project.my_project.data_init_once["foo"] == 123
     assert my_project.my_project.data_str == "foo"
+    assert my_project.my_project.get_global_num() == 0
 
     my_project.my_project.rust_extra_data = 12
     my_project.my_project.data["foo"] = 101
     my_project.my_project.data_init_once["foo"] = 102
     my_project.my_project.data_str = "bar"
+    my_project.my_project.set_global_num(100)
 
     log.info("checking root module")
     assert not hasattr(my_project, "python_extra_data")
     assert my_project.data["foo"] == 101  # imported from extension module (modification transfers)
     assert my_project.data_init_once["foo"] == 102  # imported from extension module (modification transfers)
     assert my_project.data_str == "foo"  # imported from extension module (assignment does not transfer)
+    assert my_project.get_global_num() == 100
 
     my_project.python_extra_data = 13
     my_project.data["foo"] = 201
     my_project.data_init_once["foo"] = 202
     my_project.data_str = "xyz"
+    my_project.set_global_num(200)
 
     log.info("checking other_module")
     assert not hasattr(my_project.other_module, "python_extra_data")
@@ -180,22 +185,27 @@ def _test_globals() -> None:
     assert my_project.my_project.data["foo"] == 201
     assert my_project.my_project.data_init_once["foo"] == 202
     assert my_project.my_project.data_str == "bar"
+    assert my_project.my_project.get_global_num() == 200
 
     my_project.my_project.rust_extra_data = 12
     my_project.my_project.data["foo"] = 91
     my_project.my_project.data_init_once["foo"] = 92
     my_project.my_project.data_str = "baz"
+    my_project.my_project.set_global_num(100)
 
     log.info("checking root module")
     # even if nothing has changed, a new symlink is created. This is simpler than locating the last used symlink
     # if the package has already been reloaded before
     assert my_project.__path__ != root_path
+    assert my_project.__file__ != root_file
     root_path_2 = my_project.__path__
+    root_file_2 = my_project.__file__
     # module contents are not cleared
     assert my_project.python_extra_data == 13
     assert my_project.data["foo"] == 91
     assert my_project.data_init_once["foo"] == 92
     assert my_project.data_str == "bar"
+    assert my_project.my_project.get_global_num() == 100
 
     log.info("checking other_module")
     assert not hasattr(my_project.other_module, "__path__")
@@ -217,14 +227,18 @@ def _test_globals() -> None:
     assert my_project.my_project.data["foo"] == 123
     assert my_project.my_project.data_init_once["foo"] == 123
     assert my_project.my_project.data_str == "foo"
+    assert my_project.my_project.get_global_num() == 0
 
     log.info("checking root module")
     assert my_project.__path__ != root_path
     assert my_project.__path__ != root_path_2
+    assert my_project.__file__ != root_file
+    assert my_project.__file__ != root_file_2
     assert my_project.python_extra_data == 13
     assert my_project.data["foo"] == 123
     assert my_project.data_init_once["foo"] == 123
     assert my_project.data_str == "foo"
+    assert my_project.my_project.get_global_num() == 0
 
     log.info("checking other_module")
     assert not hasattr(my_project.other_module, "__path__")

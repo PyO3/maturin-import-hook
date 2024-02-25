@@ -96,15 +96,18 @@ it so there is no way to pass state to the newly loaded module using the current
 In summary, reload support for extension modules and packages containing extension modules is possible with support
 from an import hook, but hacks are required and there are some edge cases.
 
-- project importer
+- Project Importer
   - triggered by reloading the root module (not the extension module) (i.e. `reload(some_package)` not `reload(some_package.extension_module)`)
   - behaviour is close to reloading regular python modules
-    - global data is not cleared
+    - global data is not reset if nothing has changed (this is different to reloading a python module)
+    - global data is reset if the module was recompiled
     - imports of the type `import <extension_module>` use the reloaded functionality
+  - modules other than the extension module are not reloaded by reloading the package
   - `__path__` and `__file__` are set to the temporary location required for reloading
-- file importer
+- File Importer
   - triggered by reloading an extension module originally imported by the file importer
   - behaviour is different from reloading regular python modules.
-    - Extension is loaded fresh so state does not persist
+    - Extension is loaded fresh so state assigned at load-time does not persist
+    - global data is always reset even if nothing has changed
   - imports of the type `import <extension_module>` use the reloaded functionality
   - `__file__` remains pointing at the original extension module location

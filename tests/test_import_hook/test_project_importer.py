@@ -728,10 +728,12 @@ class TestReload:
             - python module
         - properties tested
             - __path__
+            - __file__
             - adding new global
             - global initialised once
             - modifying mutable global
             - assigning to immutable global
+            - global data of the extension not the PyModule
         - reload without changes
         - reload with changes changes
         """

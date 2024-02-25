@@ -1,6 +1,24 @@
 use pyo3::class::basic::CompareOp;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::OnceLock;
+
+static RUST_DATA: OnceLock<AtomicUsize> = OnceLock::new();
+
+#[pyfunction]
+fn get_global_num() -> usize {
+    RUST_DATA
+        .get_or_init(|| AtomicUsize::new(0))
+        .load(Ordering::Relaxed)
+}
+
+#[pyfunction]
+fn set_global_num(val: usize) -> PyResult<()> {
+    let rust_data = RUST_DATA.get_or_init(|| AtomicUsize::new(0));
+    rust_data.store(val, Ordering::Relaxed);
+    Ok(())
+}
 
 #[pyfunction]
 fn get_num() -> usize {
@@ -80,6 +98,8 @@ fn register_child_module(py: Python<'_>, parent_module: &PyModule) -> PyResult<(
 #[pymodule]
 fn my_module(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_wrapped(wrap_pyfunction!(get_num))?;
+    m.add_wrapped(wrap_pyfunction!(get_global_num))?;
+    m.add_wrapped(wrap_pyfunction!(set_global_num))?;
     m.add_class::<Integer>()?;
     m.add_class::<PicklableInteger>()?;
 
