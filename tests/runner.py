@@ -24,6 +24,7 @@ class TestOptions:
     timeout: int
     lld: bool
     profile: Optional[Path]
+    html_report: bool
 
 
 def _create_workspace(path: Path) -> None:
@@ -154,7 +155,8 @@ def _run_tests_serial(
     try:
         _run_test_in_environment(venv_dir, workspace / "cache", reports_dir / "results.xml", options)
     finally:
-        _create_html_report(venv_dir, reports_dir, report_path)
+        if options.html_report:
+            _create_html_report(venv_dir, reports_dir, report_path)
 
 
 def main() -> None:
@@ -179,6 +181,12 @@ def main() -> None:
         help="the total number of seconds to allow the tests to run for before aborting",
     )
 
+    parser.add_argument(
+        "--html-report",
+        action=argparse.BooleanOptionalAction,  # type: ignore[attr-defined]
+        default=True,
+        help="whether to create a html report from the junit test report",
+    )
     parser.add_argument("--lld", action="store_true", help="use lld for linking (generally faster than the default).")
     parser.add_argument(
         "--profile",
@@ -201,6 +209,7 @@ def main() -> None:
         timeout=args.timeout,
         lld=args.lld,
         profile=args.profile,
+        html_report=args.html_report,
     )
     _run_tests_serial(args.workspace, args.python, options)
 

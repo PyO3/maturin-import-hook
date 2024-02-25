@@ -1,0 +1,141 @@
+name: Test
+
+on:
+  pull_request:
+  merge_group:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  generate-matrix:
+    name: Generate Matrix
+    runs-on: ubuntu-latest
+    outputs:
+      os: ${{ steps.generate-matrix.outputs.os }}
+      python-version: ${{ steps.generate-matrix.outputs.python-version }}
+      fail-fast: ${{ steps.generate-matrix.outputs.fail-fast }}
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 16
+      - run: npm install js-yaml
+      - name: Generate matrix
+        id: generate-matrix
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const yaml = require('js-yaml')
+            const OS = yaml.load(process.env.OS_MATRIX)
+            const PYTHON_VERSIONS = yaml.load(process.env.PYTHON_VERSION)
+
+            if (context.eventName == 'workflow_dispatch' || context.eventName == 'merge_group') {
+              // Run all of them on workflow dispatch or merge group
+              core.setOutput('os', OS)
+              core.setOutput('python-version', PYTHON_VERSIONS)
+              core.setOutput('fail-fast', 'false')
+            } else if (context.eventName == 'pull_request') {
+              const { data: { labels: labels } } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.payload.pull_request.number
+              })
+              const labelNames = labels.map(label => label.name)
+              if (labelNames.includes('CI-no-fail-fast')) {
+                core.setOutput('fail-fast', 'false')
+              }
+              // Only run latest CPython and PyPy tests on pull requests
+              const firstPyPy = PYTHON_VERSIONS.findIndex(version => version.startsWith('pypy'))
+              const pythonVersions = [PYTHON_VERSIONS[firstPyPy - 1], PYTHON_VERSIONS[PYTHON_VERSIONS.length - 1]]
+              core.setOutput('python-version', pythonVersions)
+            }
+    env:
+      OS_MATRIX: |
+         - ubuntu-latest
+      PYTHON_VERSION: |
+         - '3.11'
+      #OS_MATRIX: |
+      #  - ubuntu-latest
+      #  - macos-13
+      #  - windows-latest
+      #PYTHON_VERSION: |
+      #  - '3.8'
+      #  - '3.9'
+      #  - '3.10'
+      #  - '3.11'
+      #  - '3.12'
+      #  - 'pypy3.9'
+      #  - 'pypy3.10'
+
+
+  test:
+    name: Test
+    needs: [generate-matrix]
+    strategy:
+      fail-fast: ${{ needs.generate-matrix.outputs.fail-fast != 'false' }}
+      matrix:
+        os: ${{ fromJson(needs.generate-matrix.outputs.os) }}
+        python-version: ${{ fromJson(needs.generate-matrix.outputs.python-version) }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-activate-base: "false"
+          activate-environment: ""
+          miniconda-version: "latest"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          architecture: "x64"
+      - name: Set PYTHON_VERSION env var
+        shell: bash
+        run: |
+          set -ex
+          # remove -dev suffix
+          python_version=$(echo ${{ matrix.python-version }} | sed -e s/-dev//)
+          echo "PYTHON_VERSION=$python_version" >> "${GITHUB_ENV}"
+      - uses: dtolnay/rust-toolchain@stable
+        id: rustup
+      - name: Install aarch64-apple-darwin Rust target
+        if: startsWith(matrix.os, 'macos')
+        run: rustup target add aarch64-apple-darwin
+      - name: Setup Xcode env
+        if: startsWith(matrix.os, 'macos')
+        shell: bash
+        run: |
+          set -ex
+          sudo xcode-select -s /Applications/Xcode.app
+          bindir="$(xcode-select --print-path)/Toolchains/XcodeDefault.xctoolchain/usr/bin"
+          echo "CC=${bindir}/clang" >> "${GITHUB_ENV}"
+          echo "CXX=${bindir}/clang++" >> "${GITHUB_ENV}"
+          echo "SDKROOT=$(xcrun --sdk macosx --show-sdk-path)" >> "${GITHUB_ENV}"
+      # To save disk space
+      - name: Disable debuginfo on Windows
+        if: startsWith(matrix.os, 'windows')
+        run: echo "RUSTFLAGS="-C debuginfo=0"" >> $GITHUB_ENV
+      - name: Install test requirements
+        run: pip install -r tests/requirements.txt
+      - name: Run tests
+        run: python tests/runner.py --no-html-report --workspace ./test_workspace tests/test_import_hook/
+      - name: Publish Test Report
+        uses: mikepenz/action-junit-report@v4
+        if: success() || failure()
+        with:
+          report_paths: './test_workspace/reports/*.xml'
+
+
+  conclusion:
+    needs:
+      - test
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Result
+        run: |
+          jq -C <<< "${needs}"
+          # Check if all needs were successful or skipped.
+          "$(jq -r 'all(.result as $result | (["success", "skipped"] | contains([$result])))' <<< "${needs}")"
+        env:
+          needs: ${{ toJson(needs) }}
