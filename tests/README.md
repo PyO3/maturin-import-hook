@@ -5,11 +5,10 @@ These tests ensure that the import hook behaves correctly when installing a wide
 The recommended way to run the tests is to run:
 ```bash
 git submodule update ./maturin
-python test_runner/test_runner.py --output results.xml test_import_hook/
+python runner.py
 ```
-This script will create an isolated environment for the tests to run in.
-
-To generate a HTML report from the results, use [junit2html](https://pypi.org/project/junit2html/).
+This script will create an isolated environment for the tests to run in
+and produce a html report from the test results (see `runner.py --help` for options).
 
 ## Alternatives
 
@@ -30,7 +29,7 @@ of this repository locally.
 To update maturin:
 
 - update the submodule to the maturin commit you want to update to
-- re-run the `package_resolver` to update `resolved.json`
+- re-run the `package_resolver` to update `resolved.json` (see `package_resolver/README.md` for instructions)
 - update `requirements.txt` to match the packages and versions used by the maturin ci (`.github/workflows.test.yml`)
 - check that no crates have been added to `test-crates` that should be excluded from the import hook tests.
   If so, add them to `IGNORED_TEST_CRATES` in `common.py`

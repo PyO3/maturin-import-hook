@@ -1,4 +1,5 @@
 -e ..
+virtualenv
 maturin==1.4.0
 pytest
 junit2html
