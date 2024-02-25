@@ -1,5 +1,5 @@
 {
-  "commit": "ecb8b5023fa3e9efff511c27f38378b620400b18",
+  "commit": "c6932cd40c0869d85028841ef8e717cb19a6de38",
   "crates": {
     "cffi-mixed": {
       "cargo_manifest_path": "Cargo.toml",
@@ -91,13 +91,6 @@
       "module_full_name": "pyo3_mixed_submodule.rust_module.rust",
       "python_dir": ".",
       "python_module": "pyo3_mixed_submodule"
-    },
-    "pyo3-mixed-with-path-dep": {
-      "cargo_manifest_path": "Cargo.toml",
-      "extension_module_dir": "pyo3_mixed_with_path_dep",
-      "module_full_name": "pyo3_mixed_with_path_dep",
-      "python_dir": ".",
-      "python_module": "pyo3_mixed_with_path_dep"
     },
     "pyo3-mixed-workspace": {
       "cargo_manifest_path": "rust/python/pyo3-mixed-workspace-py/Cargo.toml",

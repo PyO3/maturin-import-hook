@@ -409,6 +409,8 @@ def test_import_multiple_projects(workspace: Path) -> None:
     assert _is_editable_installed_correctly("pyo3-pure", pure_dir, False)
 
 
+# TODO(matt): remove skip
+@pytest.mark.skip(reason="this crate is added in https://github.com/PyO3/maturin/pull/1958 which is not yet merged")
 def test_rebuild_on_change_to_path_dependency(workspace: Path) -> None:
     """This test ensures that the imported project is rebuilt if any of its path
     dependencies are edited.
