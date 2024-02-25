@@ -281,3 +281,17 @@ def capture_logs(log: Optional[logging.Logger] = None, level: int = logging.INFO
         yield out
     finally:
         log.removeHandler(handler)
+
+
+def create_echo_script(path: Path, message: str) -> None:
+    """create a file that when executed, prints the given message"""
+    if platform.system() == "Windows":
+        # scripts cannot be run directly on windows without shell=True
+        # which is not a good idea, so have to create an exe
+        with tempfile.TemporaryDirectory() as tmpdir:
+            script_path = Path(tmpdir) / "main.rs"
+            script_path.write_text(f'fn main() {{ println!("{message}") }}')
+            subprocess.check_call(["rustc", "-o", path, str(script_path)])
+    else:
+        path.write_text(f'#!/bin/sh\necho "{message}"')
+        path.chmod(0o777)

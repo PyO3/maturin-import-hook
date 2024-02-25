@@ -18,6 +18,7 @@ from .common import (
     TEST_CRATES_DIR,
     all_usable_test_crate_names,
     check_match,
+    create_echo_script,
     get_file_times,
     get_string_between,
     missing_entrypoint_error_message_pattern,
@@ -1031,11 +1032,9 @@ class TestLogging:
 
         extra_bin = workspace / "bin"
         extra_bin.mkdir()
-        mock_maturin_path = extra_bin / "maturin"
-        mock_maturin_path.write_text('#!/usr/bin/env bash\necho "maturin 0.1.2"')
-        mock_maturin_path.chmod(0o777)
+        create_echo_script(extra_bin / "maturin", "maturin 0.1.2")
 
-        output, _ = run_python_code(self._logging_helper(), env={"PATH": f"{extra_bin}:/usr/bin"})
+        output, _ = run_python_code(self._logging_helper(), env={"PATH": str(extra_bin)})
         assert output == (
             'building "test_project"\n'
             "caught MaturinError('unsupported maturin version: (0, 1, 2). "
