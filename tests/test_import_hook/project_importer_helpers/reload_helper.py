@@ -124,7 +124,7 @@ def _test_globals() -> None:
     log.info("initial import start")
     import my_project  # type: ignore[missing-import]
     import my_project.my_project  # type: ignore[missing-import]
-    import my_project.submodule  # type: ignore[missing-import]
+    import my_project.other_module  # type: ignore[missing-import]
 
     root_path = my_project.__path__
     log.info("initial import finish")
@@ -152,17 +152,17 @@ def _test_globals() -> None:
     my_project.data_init_once["foo"] = 202
     my_project.data_str = "xyz"
 
-    log.info("checking submodule")
-    assert not hasattr(my_project.submodule, "python_extra_data")
-    assert not hasattr(my_project.submodule, "__path__")
-    assert my_project.submodule.submodule_data["foo"] == 123
-    assert my_project.submodule.submodule_data_init_once["foo"] == 123
-    assert my_project.submodule.submodule_data_str == "hi"
+    log.info("checking other_module")
+    assert not hasattr(my_project.other_module, "python_extra_data")
+    assert not hasattr(my_project.other_module, "__path__")
+    assert my_project.other_module.other_data["foo"] == 123
+    assert my_project.other_module.other_data_init_once["foo"] == 123
+    assert my_project.other_module.other_data_str == "hi"
 
-    my_project.submodule.python_extra_data = 14
-    my_project.submodule.submodule_data["foo"] = 103
-    my_project.submodule.submodule_data_init_once["foo"] = 104
-    my_project.submodule.submodule_data_str = "xyz"
+    my_project.other_module.python_extra_data = 14
+    my_project.other_module.other_data["foo"] = 103
+    my_project.other_module.other_data_init_once["foo"] = 104
+    my_project.other_module.other_data_str = "xyz"
 
     log.info("reload 1 start")
     importlib.reload(my_project)
@@ -191,12 +191,12 @@ def _test_globals() -> None:
     assert my_project.data_init_once["foo"] == 92
     assert my_project.data_str == "bar"
 
-    log.info("checking submodule")
-    assert not hasattr(my_project.submodule, "__path__")
-    assert my_project.submodule.python_extra_data == 14
-    assert my_project.submodule.submodule_data["foo"] == 103
-    assert my_project.submodule.submodule_data_init_once["foo"] == 104
-    assert my_project.submodule.submodule_data_str == "xyz"
+    log.info("checking other_module")
+    assert not hasattr(my_project.other_module, "__path__")
+    assert my_project.other_module.python_extra_data == 14
+    assert my_project.other_module.other_data["foo"] == 103
+    assert my_project.other_module.other_data_init_once["foo"] == 104
+    assert my_project.other_module.other_data_str == "xyz"
 
     log.info("modifying project")
     _modify_project_num(20)
@@ -220,52 +220,52 @@ def _test_globals() -> None:
     assert my_project.data_init_once["foo"] == 123
     assert my_project.data_str == "foo"
 
-    log.info("checking submodule")
-    assert not hasattr(my_project.submodule, "__path__")
-    assert my_project.submodule.python_extra_data == 14
-    assert my_project.submodule.submodule_data["foo"] == 103
-    assert my_project.submodule.submodule_data_init_once["foo"] == 104
-    assert my_project.submodule.submodule_data_str == "xyz"
+    log.info("checking other_module")
+    assert not hasattr(my_project.other_module, "__path__")
+    assert my_project.other_module.python_extra_data == 14
+    assert my_project.other_module.other_data["foo"] == 103
+    assert my_project.other_module.other_data_init_once["foo"] == 104
+    assert my_project.other_module.other_data_str == "xyz"
 
     log.info("SUCCESS")
 
 
-def _test_python_submodule() -> None:
+def _test_other_module() -> None:
     maturin_import_hook.install()
 
     log.info("initial import start")
     import my_project  # type: ignore[missing-import]
-    import my_project.submodule  # type: ignore[missing-import]
+    import my_project.other_module  # type: ignore[missing-import]
 
     log.info("initial import finish")
 
     assert my_project.get_num() == 10
-    assert my_project.submodule.get_twice_num_direct() == 20
-    assert my_project.submodule.get_twice_num_indirect() == 20
-    assert my_project.submodule.submodule_data == "hi"
-    my_project.submodule.submodule_data = "hi2"
-    assert my_project.submodule.submodule_data_init_once == "foo"
-    my_project.submodule.submodule_data_init_once = "bar"
+    assert my_project.other_module.get_twice_num_direct() == 20
+    assert my_project.other_module.get_twice_num_indirect() == 20
+    assert my_project.other_module.other_data_str == "hi"
+    my_project.other_module.other_data_str = "hi2"
+    assert my_project.other_module.other_data_init_once == {"foo": 123}
+    my_project.other_module.other_data_init_once = "bar"
 
     log.info("modifying project")
     _modify_project_num(30)
 
     assert my_project.get_num() == 10
-    assert my_project.submodule.get_twice_num_direct() == 20
-    assert my_project.submodule.get_twice_num_indirect() == 20
-    assert my_project.submodule.submodule_data == "hi2"
-    assert my_project.submodule.submodule_data_init_once == "bar"
+    assert my_project.other_module.get_twice_num_direct() == 20
+    assert my_project.other_module.get_twice_num_indirect() == 20
+    assert my_project.other_module.other_data_str == "hi2"
+    assert my_project.other_module.other_data_init_once == "bar"
 
-    log.info("reload submodule start")
-    importlib.reload(my_project.submodule)
-    log.info("reload submodule finish")
+    log.info("reload other_module start")
+    importlib.reload(my_project.other_module)
+    log.info("reload other_module finish")
 
-    assert my_project.get_num() == 10  # reloading submodule does not trigger rebuild
-    assert my_project.submodule.get_twice_num_direct() == 20
-    assert my_project.submodule.get_twice_num_indirect() == 20
-    assert my_project.submodule.submodule_data == "hi"  # submodule itself is reloaded
-    my_project.submodule.submodule_data = "hi3"
-    assert my_project.submodule.submodule_data_init_once == "bar"  # not reset
+    assert my_project.get_num() == 10  # reloading other_module does not trigger rebuild
+    assert my_project.other_module.get_twice_num_direct() == 20
+    assert my_project.other_module.get_twice_num_indirect() == 20
+    assert my_project.other_module.other_data_str == "hi"  # other_module itself is reloaded
+    my_project.other_module.other_data_str = "hi3"
+    assert my_project.other_module.other_data_init_once == "bar"  # not reset
 
     log.info("reload package start")
     importlib.reload(my_project)
@@ -273,21 +273,21 @@ def _test_python_submodule() -> None:
 
     assert my_project.get_num() == 30  # top level package and extension module are reloaded
     # other modules that import the extension module do not reload
-    assert my_project.submodule.get_twice_num_direct() == 20
-    assert my_project.submodule.get_twice_num_indirect() == 20
-    assert my_project.submodule.submodule_data == "hi3"
-    assert my_project.submodule.submodule_data_init_once == "bar"  # not reset
+    assert my_project.other_module.get_twice_num_direct() == 20
+    assert my_project.other_module.get_twice_num_indirect() == 20
+    assert my_project.other_module.other_data_str == "hi3"
+    assert my_project.other_module.other_data_init_once == "bar"  # not reset
 
-    log.info("reload submodule start")
-    importlib.reload(my_project.submodule)
-    log.info("reload submodule finish")
+    log.info("reload other_module start")
+    importlib.reload(my_project.other_module)
+    log.info("reload other_module finish")
 
     assert my_project.get_num() == 30
     # when other modules are reloaded, they import the reloaded extension module
-    assert my_project.submodule.get_twice_num_direct() == 60
-    assert my_project.submodule.get_twice_num_indirect() == 60
-    assert my_project.submodule.submodule_data == "hi"
-    assert my_project.submodule.submodule_data_init_once == "bar"  # not reset
+    assert my_project.other_module.get_twice_num_direct() == 60
+    assert my_project.other_module.get_twice_num_indirect() == 60
+    assert my_project.other_module.other_data_str == "hi"
+    assert my_project.other_module.other_data_init_once == "bar"  # not reset
 
     log.info("SUCCESS")
 
@@ -328,6 +328,16 @@ def _test_reload_without_import_hook() -> None:
 
     assert my_project.get_num() == 10  # not reloaded
     assert my_project.my_project.get_num() == 10
+    assert my_project.my_project.get_num() == 10
+
+    log.info("uninstalling import hook")
+    maturin_import_hook.uninstall()
+
+    log.info("reload package start")
+    importlib.reload(my_project)
+    log.info("reload package finish")
+
+    assert my_project.get_num() == 10  # not reloaded
     assert my_project.my_project.get_num() == 10
 
     log.info("SUCCESS")
@@ -392,6 +402,15 @@ def _test_compilation_error() -> None:
 
     assert my_project.get_num() == 10
 
+    log.info("modifying project")
+    _modify_project_num(20)
+
+    log.info("reload start")
+    importlib.reload(my_project)
+    log.info("reload finish")
+
+    assert my_project.get_num() == 20
+
     log.info("SUCCESS")
 
 
@@ -442,8 +461,8 @@ if action == "_test_basic_reload":
     _test_basic_reload()
 elif action == "_test_globals":
     _test_globals()
-elif action == "_test_python_submodule":
-    _test_python_submodule()
+elif action == "_test_other_module":
+    _test_other_module()
 elif action == "_test_reload_without_import_hook":
     _test_reload_without_import_hook()
 elif action == "_test_install_after_import":

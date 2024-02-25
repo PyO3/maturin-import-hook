@@ -122,6 +122,9 @@ def _run_test_in_environment(
 def _create_html_report(venv_dir: Path, reports_dir: Path, output_path: Path) -> None:
     interpreter = _get_interpreter_path(venv_dir)
     reports = [str(p) for p in reports_dir.resolve().glob("*.xml")]
+    if not reports:
+        log.info("cannot create a report: no files in reports dir")
+        return
     cmd = [str(interpreter), "-m", "junit2htmlreport", *reports, str(output_path)]
     subprocess.check_call(cmd)
     log.info("report written to %s", output_path)
@@ -140,10 +143,12 @@ def _run_tests_serial(
     report_path.unlink(missing_ok=True)
 
     _create_test_venv(python, venv_dir)
-    _run_test_in_environment(
-        venv_dir, workspace / "cache", reports_dir / "results.xml", test_specification, lld=lld, profile=profile
-    )
-    _create_html_report(venv_dir, reports_dir, report_path)
+    try:
+        _run_test_in_environment(
+            venv_dir, workspace / "cache", reports_dir / "results.xml", test_specification, lld=lld, profile=profile
+        )
+    finally:
+        _create_html_report(venv_dir, reports_dir, report_path)
 
 
 def main() -> None:
