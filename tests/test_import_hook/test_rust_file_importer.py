@@ -366,6 +366,8 @@ class TestReload:
 
         assert 'module up to date: "my_module"' not in reload_3
 
+        assert "maturin_import_hook [DEBUG] removing temporary directory" in output
+
     def test_globals(self, workspace: Path) -> None:
         """tests properties of global variables initialised in python and rust modules when the package is reloaded
 

@@ -29,6 +29,7 @@ from maturin_import_hook._building import (
     get_installation_mtime,
     maturin_output_has_warnings,
 )
+from maturin_import_hook._common import LazySessionTemporaryDirectory
 from maturin_import_hook._logging import logger
 from maturin_import_hook._resolve_project import (
     MaturinProject,
@@ -89,7 +90,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
         self._force_rebuild = force_rebuild
         self._show_warnings = show_warnings
         self._maturin_path: Optional[Path] = None
-        self._reload_tmp_path: Optional[Path] = None
+        self._reload_tmp_path = LazySessionTemporaryDirectory(prefix=type(self).__name__)
 
     def get_settings(self, module_path: str, source_path: Path) -> MaturinSettings:
         """This method can be overridden in subclasses to customize settings for specific projects."""
@@ -175,9 +176,6 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
         if debug_log_enabled:
             logger.debug('handling reload of "%s"', package_name)
 
-        if self._reload_tmp_path is None:
-            self._reload_tmp_path = Path(tempfile.mkdtemp(prefix=type(self).__name__))
-
         if spec.origin is None:
             logger.error("module spec has no origin. cannot reload")
             return spec
@@ -186,7 +184,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
             logger.error('unexpected package origin: "%s". Not reloading', origin)
             return spec
 
-        this_reload_dir = Path(tempfile.mkdtemp(prefix=package_name, dir=self._reload_tmp_path))
+        this_reload_dir = Path(tempfile.mkdtemp(prefix=package_name, dir=self._reload_tmp_path.path))
         (this_reload_dir / package_name).symlink_to(origin.parent)
         if debug_log_enabled:
             logger.debug("package reload symlink: %s", this_reload_dir)

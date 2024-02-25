@@ -24,6 +24,7 @@ from maturin_import_hook._building import (
     maturin_output_has_warnings,
     run_maturin,
 )
+from maturin_import_hook._common import LazySessionTemporaryDirectory
 from maturin_import_hook._logging import logger
 from maturin_import_hook._resolve_project import ProjectResolver, find_cargo_manifest
 from maturin_import_hook.error import ImportHookError
@@ -47,20 +48,12 @@ class MaturinRustFileImporter(importlib.abc.MetaPathFinder):
     ) -> None:
         self._force_rebuild = force_rebuild
         self._enable_reloading = enable_reloading
-        self._reload_tmp_path: Optional[Path] = None
         self._resolver = ProjectResolver()
         self._settings = settings
         self._build_cache = BuildCache(build_dir, lock_timeout_seconds)
         self._show_warnings = show_warnings
         self._maturin_path: Optional[Path] = None
-
-    def __del__(self) -> None:
-        if self._reload_tmp_path is not None:
-            logger.debug("removing temporary files used for reloading")
-            try:
-                shutil.rmtree(self._reload_tmp_path)
-            except OSError as e:
-                logger.debug("failed to remove temporary files: %r", e)
+        self._reload_tmp_path = LazySessionTemporaryDirectory(prefix=type(self).__name__)
 
     def get_settings(self, module_path: str, source_path: Path) -> MaturinSettings:
         """This method can be overridden in subclasses to customize settings for specific projects."""
@@ -174,15 +167,11 @@ class MaturinRustFileImporter(importlib.abc.MetaPathFinder):
         if debug_log_enabled:
             logger.debug('handling reload of "%s"', module_path)
 
-        if self._reload_tmp_path is None:
-            self._reload_tmp_path = Path(tempfile.mkdtemp(prefix=type(self).__name__))
-
         if spec.origin is None:
             logger.error("module spec has no origin. cannot reload")
             return spec
         origin = Path(spec.origin).resolve()
-        tempfile.mkdtemp(prefix=module_path, dir=self._reload_tmp_path)
-        this_reload_dir = Path(tempfile.mkdtemp(prefix=module_path, dir=self._reload_tmp_path))
+        this_reload_dir = Path(tempfile.mkdtemp(prefix=module_path, dir=self._reload_tmp_path.path))
         # if a symlink is used instead of a copy, if nothing has changed then the module is not re-initialised
         reloaded_module_path = this_reload_dir / origin.name
         shutil.copy(origin, reloaded_module_path)
