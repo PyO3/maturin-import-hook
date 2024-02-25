@@ -1,6 +1,38 @@
 name: Test
 
 on:
+  workflow_dispatch:
+    inputs:
+      os:
+        type: choice
+        description: OS to test with
+        default: 'ubuntu-latest'
+        options:
+        - all
+        - ubuntu-latest
+        - macos-14
+        - windows-latest
+      python_version:
+        type: choice
+        description: Python version to test with
+        default: '3.11'
+        options:
+        - 'all'
+        - '3.8'
+        - '3.9'
+        - '3.10'
+        - '3.11'
+        - '3.12'
+        - 'pypy3.9'
+        - 'pypy3.10'
+      test_specification:
+        type: string
+        description: Specification for the tests to run
+        default: 'tests/test_import_hook/'
+      fail_fast:
+        type: boolean
+        default: true
+        description: Fail fast
   pull_request:
   merge_group:
 
@@ -30,11 +62,18 @@ jobs:
             const OS = yaml.load(process.env.OS_MATRIX)
             const PYTHON_VERSIONS = yaml.load(process.env.PYTHON_VERSION)
 
-            if (context.eventName == 'workflow_dispatch' || context.eventName == 'merge_group') {
-              // Run all of them on workflow dispatch or merge group
+            if (context.eventName == 'workflow_dispatch') {
+              const input_os = "${{ github.event.inputs.os }}";
+              const input_python_version = "${{ github.event.inputs.python_version }}";
+              core.setOutput('os', input_os == "all" ? OS : [input_os]);
+              core.setOutput('python-version', input_python_version == "all" ? PYTHON_VERSIONS : [input_python_version]);
+              core.setOutput('fail-fast', "${{ github.event.inputs.fail_fast }}");
+
+            } else if (context.eventName == 'merge_group') {
               core.setOutput('os', OS)
               core.setOutput('python-version', PYTHON_VERSIONS)
               core.setOutput('fail-fast', 'false')
+
             } else if (context.eventName == 'pull_request') {
               const { data: { labels: labels } } = await github.rest.pulls.get({
                 owner: context.repo.owner,
@@ -52,21 +91,17 @@ jobs:
             }
     env:
       OS_MATRIX: |
-         - ubuntu-latest
+        - ubuntu-latest
+        - macos-14
+        - windows-latest
       PYTHON_VERSION: |
-         - '3.11'
-      #OS_MATRIX: |
-      #  - ubuntu-latest
-      #  - macos-13
-      #  - windows-latest
-      #PYTHON_VERSION: |
-      #  - '3.8'
-      #  - '3.9'
-      #  - '3.10'
-      #  - '3.11'
-      #  - '3.12'
-      #  - 'pypy3.9'
-      #  - 'pypy3.10'
+        - '3.8'
+        - '3.9'
+        - '3.10'
+        - '3.11'
+        - '3.12'
+        - 'pypy3.9'
+        - 'pypy3.10'
 
 
   test:
@@ -80,22 +115,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: conda-incubator/setup-miniconda@v3
         with:
-          auto-activate-base: "false"
-          activate-environment: ""
-          miniconda-version: "latest"
+          submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           architecture: "x64"
-      - name: Set PYTHON_VERSION env var
-        shell: bash
-        run: |
-          set -ex
-          # remove -dev suffix
-          python_version=$(echo ${{ matrix.python-version }} | sed -e s/-dev//)
-          echo "PYTHON_VERSION=$python_version" >> "${GITHUB_ENV}"
+          cache: "pip"
       - uses: dtolnay/rust-toolchain@stable
         id: rustup
       - name: Install aarch64-apple-darwin Rust target
@@ -116,14 +142,32 @@ jobs:
         if: startsWith(matrix.os, 'windows')
         run: echo "RUSTFLAGS="-C debuginfo=0"" >> $GITHUB_ENV
       - name: Install test requirements
-        run: pip install -r tests/requirements.txt
+        run: cd tests && pip install --disable-pip-version-check -r requirements.txt
       - name: Run tests
-        run: python tests/runner.py --no-html-report --workspace ./test_workspace tests/test_import_hook/
+        shell: bash
+        run: |
+          EXTRA_ARGS=""
+          if [ "${{ needs.generate-matrix.outputs.fail-fast }}" != "false" ]; then
+            EXTRA_ARGS="$EXTRA_ARGS --max-failures 4"
+          fi
+
+          python tests/runner.py \
+            --workspace ./test_workspace \
+            --name "${{ matrix.os }}_${{ matrix.python-version }}" \
+            ${EXTRA_ARGS} \
+            "${{ github.event.inputs.test_specification || 'tests/test_import_hook' }}"
+      - name: Upload HTML test report
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: ${{ matrix.os }}-${{ matrix.python-version }}-test-report.html
+          path: './test_workspace/report.html'
       - name: Publish Test Report
         uses: mikepenz/action-junit-report@v4
         if: success() || failure()
         with:
           report_paths: './test_workspace/reports/*.xml'
+          test_files_prefix: "${{ matrix.os }}_${{ matrix.python-version }}"
 
 
   conclusion:

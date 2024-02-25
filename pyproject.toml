@@ -83,7 +83,7 @@ exclude = [
 addopts = "--ignore tests/maturin --capture=no -v"
 testpaths = ["tests"]
 junit_logging = "all"
-junit_log_passing_tests = true
+junit_log_passing_tests = false
 # total includes setup and teardown
 junit_duration_report = "total"
 junit_family = "xunit2"
