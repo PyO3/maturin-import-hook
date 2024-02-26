@@ -1,5 +1,7 @@
+import json
 import logging
 import os
+import platform
 import re
 import shutil
 import site
@@ -7,7 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 from textwrap import dedent
-from typing import Iterator, Tuple
+from typing import Iterator, Set, Tuple
 
 import pytest
 from maturin_import_hook._building import fix_direct_url
@@ -42,6 +44,21 @@ package which provides a clean environment and allows running the tests in paral
 script_dir = Path(__file__).parent.resolve()
 helpers_dir = script_dir / "project_importer_helpers"
 log = logging.getLogger(__name__)
+
+
+@pytest.fixture(autouse=True)
+def _reset_virtualenv() -> Iterator[None]:
+    """uninstall packages installed during each test. Technically not necessary since additional packages should
+    not interfere with the tests but should result in clearer logs"""
+    packages_before = _get_installed_package_names()
+    try:
+        yield
+    finally:
+        packages_after = _get_installed_package_names()
+        packages_to_uninstall = sorted(packages_after - packages_before)
+        if packages_to_uninstall:
+            log.info("uninstalling packages installed during this test: %s", packages_to_uninstall)
+            _uninstall(*packages_to_uninstall)
 
 
 @pytest.mark.parametrize(
@@ -426,16 +443,16 @@ def test_rebuild_on_change_to_path_dependency(workspace: Path) -> None:
     _install_editable(project_dir)
     assert _is_editable_installed_correctly(project_name, project_dir, True)
 
-    check_installed = f"""
-{IMPORT_HOOK_HEADER}
+    check_installed = dedent(f"""\
+    {IMPORT_HOOK_HEADER}
 
-import pyo3_mixed_with_path_dep
+    import pyo3_mixed_with_path_dep
 
-assert pyo3_mixed_with_path_dep.get_42() == 42, 'get_42 did not return 42'
+    assert pyo3_mixed_with_path_dep.get_42() == 42, 'get_42 did not return 42'
 
-print('21 is half 42:', pyo3_mixed_with_path_dep.is_half(21, 42))
-print('21 is half 63:', pyo3_mixed_with_path_dep.is_half(21, 63))
-"""
+    print('21 is half 42:', pyo3_mixed_with_path_dep.is_half(21, 42))
+    print('21 is half 63:', pyo3_mixed_with_path_dep.is_half(21, 63))
+    """)
 
     output1, duration1 = run_python_code(check_installed)
     assert "21 is half 42: True" in output1
@@ -557,6 +574,7 @@ def test_low_resolution_mtime(workspace: Path) -> None:
     assert "SUCCESS" in output4
 
 
+@pytest.mark.skipif(platform.system() == "Windows", reason="reload not yet supported on windows")
 class TestReload:
     """test that importlib.reload() can be used to reload modules imported by the import hook
 
@@ -1125,6 +1143,7 @@ class TestLogging:
         )
         check_match(output2, pattern, flags=re.MULTILINE | re.DOTALL)
 
+    @pytest.mark.skipif(platform.system() == "Windows", reason="reload not yet supported on windows")
     def test_reload(self, workspace: Path) -> None:
         self._create_clean_project(workspace, is_mixed=False)
 
@@ -1312,17 +1331,42 @@ def _rebuilt_message(project_name: str) -> str:
     return f'rebuilt and loaded package "{with_underscores(project_name)}"'
 
 
-def _uninstall(project_name: str) -> None:
-    log.info("uninstalling %s", project_name)
-    subprocess.check_call([sys.executable, "-m", "pip", "uninstall", "--disable-pip-version-check", "-y", project_name])
+def _uninstall(*project_names: str) -> None:
+    log.info("uninstalling %s", sorted(project_names))
+    subprocess.check_call([
+        sys.executable,
+        "-m",
+        "pip",
+        "uninstall",
+        "--disable-pip-version-check",
+        "-y",
+        *project_names,
+    ])
+
+
+def _get_installed_package_names() -> Set[str]:
+    packages = json.loads(
+        subprocess.check_output([
+            sys.executable,
+            "-m",
+            "pip",
+            "--disable-pip-version-check",
+            "list",
+            "--format=json",
+        ]).decode()
+    )
+    return {package["name"] for package in packages}
 
 
 def _install_editable(project_dir: Path) -> None:
     """Install the given project to the virtualenv in editable mode."""
     log.info("installing %s in editable/unpacked mode", project_dir.name)
+    assert project_dir.is_dir()
+    maturin_path = shutil.which("maturin")
+    assert maturin_path is not None
     env = os.environ.copy()
     env["VIRTUAL_ENV"] = sys.exec_prefix
-    subprocess.check_call(["maturin", "develop"], cwd=project_dir, env=env)
+    subprocess.check_call([maturin_path, "develop"], cwd=project_dir, env=env)
     # TODO(matt): remove once maturin develop creates editable installs
     fix_direct_url(project_dir, with_underscores(project_dir.name))
 

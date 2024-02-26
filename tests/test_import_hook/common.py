@@ -5,6 +5,7 @@ import multiprocessing
 import os
 import platform
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -44,14 +45,24 @@ maturin_import_hook.install()
 
 @dataclass
 class ResolvedPackage:
-    cargo_manifest_path: str
-    extension_module_dir: Optional[str]
+    cargo_manifest_path: Path
+    extension_module_dir: Optional[Path]
     module_full_name: str
-    python_dir: str
-    python_module: Optional[str]
+    python_dir: Path
+    python_module: Optional[Path]
+
+    @staticmethod
+    def from_dict(data: Dict[str, Any]) -> "ResolvedPackage":
+        return ResolvedPackage(
+            cargo_manifest_path=Path(data["cargo_manifest_path"]),
+            extension_module_dir=map_optional(data["extension_module_dir"], Path),
+            module_full_name=data["module_full_name"],
+            python_dir=Path(data["python_dir"]),
+            python_module=map_optional(data["python_module"], Path),
+        )
 
     def to_json(self) -> str:
-        return json.dumps(dataclasses.asdict(self), indent=2, sort_keys=True)
+        return json.dumps({k: str(v) for k, v in dataclasses.asdict(self).items()}, indent=2, sort_keys=True)
 
 
 _RESOLVED_PACKAGES: Optional[Dict[str, Optional[ResolvedPackage]]] = None
@@ -64,14 +75,16 @@ def resolved_packages() -> Dict[str, Optional[ResolvedPackage]]:
             data = json.load(f)
 
         commit_hash = data["commit"]
-        cmd = ["git", "rev-parse", "HEAD"]
+        git_path = shutil.which("git")
+        assert git_path is not None
+        cmd = [git_path, "rev-parse", "HEAD"]
         current_commit_hash = subprocess.check_output(cmd, cwd=MATURIN_DIR).decode().strip()
         assert (
             current_commit_hash == commit_hash
         ), "the maturin submodule is not in sync with resolved.json. See package_resolver/README.md for details"
 
         _RESOLVED_PACKAGES = {
-            crate_name: None if crate_data is None else ResolvedPackage(**crate_data)
+            crate_name: None if crate_data is None else ResolvedPackage.from_dict(crate_data)
             for crate_name, crate_data in data["crates"].items()
         }
     return _RESOLVED_PACKAGES
@@ -291,7 +304,7 @@ def create_echo_script(path: Path, message: str) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             script_path = Path(tmpdir) / "main.rs"
             script_path.write_text(f'fn main() {{ println!("{message}") }}')
-            subprocess.check_call(["rustc", "-o", path, str(script_path)])
+            subprocess.check_call(["rustc", "-o", path.with_suffix(".exe"), str(script_path)])
     else:
         path.write_text(f'#!/bin/sh\necho "{message}"')
         path.chmod(0o777)

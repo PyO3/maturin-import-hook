@@ -140,7 +140,7 @@ class TestGetInstallationFreshness:
         assert freshness == Freshness(False, "failed to read installed files", None, None)
         expected_logs = (
             "error reading installed file mtimes: "
-            f"FileNotFoundError(2, 'No such file or directory') ({tmp_path / 'missing'})\n"
+            f"FileNotFoundError(2, '{_file_not_found_message()}') ({tmp_path / 'missing'})\n"
         )
         assert cap.getvalue() == expected_logs
 
@@ -161,7 +161,7 @@ class TestGetInstallationFreshness:
 
         expected_error = re.escape(
             "error reading source file mtimes: "
-            f"FileNotFoundError(2, 'No such file or directory') ({tmp_path / 'missing'})"
+            f"FileNotFoundError(2, '{_file_not_found_message()}') ({tmp_path / 'missing'})"
         )
         with pytest.raises(ImportHookError, match=expected_error):
             get_installation_freshness([tmp_path / "missing"], [tmp_path / "install"], s)
@@ -192,7 +192,7 @@ class TestGetInstallationFreshness:
             False, "installation mtime does not match build status mtime", tmp_path / "install_1", None
         )
 
-    def test_read_error(self, tmp_path: Path) -> None:
+    def test_read_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         unreadable_dir = tmp_path / "unreadable"
         unreadable_dir.mkdir()
         (unreadable_dir / "source").touch()
@@ -206,28 +206,23 @@ class TestGetInstallationFreshness:
         (readable_dir / "install").touch()
         readable_status = self._build_status_for_file(readable_dir / "install")
 
-        try:
-            unreadable_dir.chmod(0o000)
+        _mock_directory_as_unreadable(unreadable_dir, monkeypatch)
 
-            with capture_logs() as cap:
-                freshness = get_installation_freshness([], [unreadable_dir / "install"], unreadable_status)
-            expected_logs = (
-                "error reading installed file mtimes: "
-                f"PermissionError(13, 'Permission denied') ({unreadable_dir / 'install'})\n"
-            )
-            assert cap.getvalue() == expected_logs
-            assert freshness == Freshness(False, "failed to read installed files", None, None)
+        with capture_logs() as cap:
+            freshness = get_installation_freshness([], [unreadable_dir / "install"], unreadable_status)
+        expected_logs = (
+            "error reading installed file mtimes: "
+            f"PermissionError(13, 'Permission denied') ({unreadable_dir / 'install'})\n"
+        )
+        assert cap.getvalue() == expected_logs
+        assert freshness == Freshness(False, "failed to read installed files", None, None)
 
-            expected_error = re.escape(
-                "error reading source file mtimes: "
-                f"PermissionError(13, 'Permission denied') ({unreadable_dir / 'source'})"
-            )
-            with pytest.raises(ImportHookError, match=expected_error):
-                get_installation_freshness([unreadable_dir / "source"], [readable_dir / "install"], readable_status)
-
-        finally:
-            # make sure that the temporary files can be cleaned up after the test
-            unreadable_dir.chmod(0o777)
+        expected_error = re.escape(
+            "error reading source file mtimes: "
+            f"PermissionError(13, 'Permission denied') ({unreadable_dir / 'source'})"
+        )
+        with pytest.raises(ImportHookError, match=expected_error):
+            get_installation_freshness([unreadable_dir / "source"], [readable_dir / "install"], readable_status)
 
     def test_equal_mtime(self, tmp_path: Path) -> None:
         (tmp_path / "source").touch()
@@ -302,14 +297,14 @@ def test_resolve_project(project_name: str) -> None:
         calculated = None
     else:
 
-        def _relative_path_str(path: Path) -> str:
-            return str(path.relative_to(project_dir))
+        def _relative_path(path: Path) -> Path:
+            return path.relative_to(project_dir)
 
         calculated = ResolvedPackage(
-            cargo_manifest_path=_relative_path_str(resolved.cargo_manifest_path),
-            python_dir=_relative_path_str(resolved.python_dir),
-            python_module=map_optional(resolved.python_module, _relative_path_str),
-            extension_module_dir=map_optional(resolved.extension_module_dir, _relative_path_str),
+            cargo_manifest_path=_relative_path(resolved.cargo_manifest_path),
+            python_dir=_relative_path(resolved.python_dir),
+            python_module=map_optional(resolved.python_module, _relative_path),
+            extension_module_dir=map_optional(resolved.extension_module_dir, _relative_path),
             module_full_name=resolved.module_full_name,
         )
     log.info("calculated:")
@@ -374,7 +369,8 @@ def test_toml_file_loading(tmp_path: Path) -> None:
 def test_toml_file(caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.INFO)
 
-    toml_file = _TomlFile(Path("/toml_path"), {"foo": {"bar": 12, "baz": ["a"]}})
+    path = Path("/toml_path")
+    toml_file = _TomlFile(path, {"foo": {"bar": 12, "baz": ["a"]}})
 
     with pytest.raises(AssertionError):
         toml_file.get_value([], int)
@@ -387,15 +383,15 @@ def test_toml_file(caplog: pytest.LogCaptureFixture) -> None:
     assert caplog.messages == []
 
     assert toml_file.get_value(["foo", "bar"], str) is None
-    assert caplog.messages == ["failed to get str value at 'foo.bar' from toml file: '/toml_path'"]
+    assert caplog.messages == [f"failed to get str value at 'foo.bar' from toml file: '{path}'"]
     caplog.clear()
 
     assert toml_file.get_value(["foo", "bar", "xyz"], int) is None
-    assert caplog.messages == ["failed to get int value at 'foo.bar.xyz' from toml file: '/toml_path'"]
+    assert caplog.messages == [f"failed to get int value at 'foo.bar.xyz' from toml file: '{path}'"]
     caplog.clear()
 
     assert toml_file.get_value(["foo", "baz", "xyz"], int) is None
-    assert caplog.messages == ["failed to get int value at 'foo.baz.xyz' from toml file: '/toml_path'"]
+    assert caplog.messages == [f"failed to get int value at 'foo.baz.xyz' from toml file: '{path}'"]
     caplog.clear()
 
 
@@ -404,3 +400,43 @@ def test_get_string_between() -> None:
     assert get_string_between("11aaabbbccc11", "xxx", "ccc") is None
     assert get_string_between("11aaabbbccc11", "aaa", "xxx") is None
     assert get_string_between("11aaabbbccc11", "xxx", "xxx") is None
+
+
+def _mock_directory_as_unreadable(dir_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """cause PermissionError to be raised when calling `pathlib.Path.stat()` on a file inside the given directory
+
+    on POSIX, could use `os.chmod(0o000)` but on Windows there is no easy mechanism for causing a PermissionError
+    to be raised when accessing a file, so monkey patch instead
+    """
+
+    original_stat = Path.stat
+
+    def patched_stat(self: Path) -> object:
+        if _is_relative_to(self, dir_path):
+            e = PermissionError(13, "Permission denied")
+            e.filename = str(self)
+            raise e
+        return original_stat(self)
+
+    monkeypatch.setattr(Path, "stat", patched_stat)
+
+    with pytest.raises(PermissionError, match="Permission denied") as e_info:
+        (dir_path / "abc").stat()
+    assert e_info.value.errno == 13
+    assert e_info.value.filename == str(dir_path / "abc")
+
+
+def _is_relative_to(a: Path, b: Path) -> bool:
+    # TODO(matt): when 3.9 is the minimum supported python version, use Path.is_relative_to
+    try:
+        a.relative_to(b)
+    except ValueError:
+        return False
+    else:
+        return True
+
+
+def _file_not_found_message() -> str:
+    return (
+        "The system cannot find the file specified" if platform.system() == "Windows" else "No such file or directory"
+    )

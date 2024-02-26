@@ -1,8 +1,11 @@
+import platform
 import re
 import shutil
 from pathlib import Path
 from textwrap import dedent
 from typing import Tuple
+
+import pytest
 
 from .common import (
     check_match,
@@ -242,6 +245,7 @@ def test_rebuild_on_settings_change(workspace: Path) -> None:
     assert "SUCCESS" in output4
 
 
+@pytest.mark.skipif(platform.system() == "Windows", reason="reload not yet supported on windows")
 class TestReload:
     """test that importlib.reload() can be used to reload modules imported by the import hook
 
@@ -691,6 +695,7 @@ class TestLogging:
         )
         check_match(output2, pattern, flags=re.MULTILINE | re.DOTALL)
 
+    @pytest.mark.skipif(platform.system() == "Windows", reason="reload not yet supported on windows")
     def test_reload(self, workspace: Path) -> None:
         rs_path, py_path = self._create_clean_package(workspace / "package", reload_helper=True)
 
