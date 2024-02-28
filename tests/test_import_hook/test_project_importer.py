@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import platform
 import re
 import shutil
 import site
@@ -17,6 +16,7 @@ from maturin_import_hook.project_importer import DefaultProjectFileSearcher, _lo
 
 from .common import (
     IMPORT_HOOK_HEADER,
+    RELOAD_SUPPORTED,
     TEST_CRATES_DIR,
     all_usable_test_crate_names,
     check_match,
@@ -578,7 +578,7 @@ def test_low_resolution_mtime(workspace: Path) -> None:
     assert "SUCCESS" in output4
 
 
-@pytest.mark.skipif(platform.system() == "Windows", reason="reload not yet supported on windows")
+@pytest.mark.skipif(not RELOAD_SUPPORTED, reason="reload not supported")
 class TestReload:
     """test that importlib.reload() can be used to reload modules imported by the import hook
 
@@ -1049,7 +1049,8 @@ class TestLogging:
     def test_maturin_detection(self, workspace: Path) -> None:
         self._create_clean_project(workspace, True)
 
-        env = {"PATH": remove_executable_from_path(os.environ["PATH"], "maturin")}
+        env = os.environ.copy()
+        env["PATH"] = remove_executable_from_path(env["PATH"], "maturin")
 
         output, _ = run_python_code(self._logging_helper(), env=env)
         assert output == "building \"test_project\"\ncaught MaturinError('maturin not found')\n"
@@ -1150,7 +1151,7 @@ class TestLogging:
         )
         check_match(output2, pattern, flags=re.MULTILINE | re.DOTALL)
 
-    @pytest.mark.skipif(platform.system() == "Windows", reason="reload not yet supported on windows")
+    @pytest.mark.skipif(not RELOAD_SUPPORTED, reason="reload not supported")
     def test_reload(self, workspace: Path) -> None:
         self._create_clean_project(workspace, is_mixed=False)
 

@@ -1,5 +1,4 @@
 import os
-import platform
 import re
 import shutil
 from pathlib import Path
@@ -9,6 +8,7 @@ from typing import Tuple
 import pytest
 
 from .common import (
+    RELOAD_SUPPORTED,
     check_match,
     create_echo_script,
     get_file_times,
@@ -247,7 +247,7 @@ def test_rebuild_on_settings_change(workspace: Path) -> None:
     assert "SUCCESS" in output4
 
 
-@pytest.mark.skipif(platform.system() == "Windows", reason="reload not yet supported on windows")
+@pytest.mark.skipif(not RELOAD_SUPPORTED, reason="reload not supported")
 class TestReload:
     """test that importlib.reload() can be used to reload modules imported by the import hook
 
@@ -611,7 +611,8 @@ class TestLogging:
     def test_maturin_detection(self, workspace: Path) -> None:
         rs_path, py_path = self._create_clean_package(workspace / "package")
 
-        env = {"PATH": remove_executable_from_path(os.environ["PATH"], "maturin")}
+        env = os.environ.copy()
+        env["PATH"] = remove_executable_from_path(env["PATH"], "maturin")
 
         output, _ = run_python([str(py_path)], workspace, env=env)
         assert output == "building \"my_script\"\ncaught MaturinError('maturin not found')\n"
@@ -701,7 +702,7 @@ class TestLogging:
         )
         check_match(output2, pattern, flags=re.MULTILINE | re.DOTALL)
 
-    @pytest.mark.skipif(platform.system() == "Windows", reason="reload not yet supported on windows")
+    @pytest.mark.skipif(not RELOAD_SUPPORTED, reason="reload not supported")
     def test_reload(self, workspace: Path) -> None:
         rs_path, py_path = self._create_clean_package(workspace / "package", reload_helper=True)
 

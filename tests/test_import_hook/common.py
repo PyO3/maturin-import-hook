@@ -42,6 +42,13 @@ maturin_import_hook.reset_logger()
 maturin_import_hook.install()
 """
 
+RELOAD_SUPPORTED = platform.system() != "Windows" and sys.version_info >= (3, 9)
+"""
+- reloading is not yet supported on Windows
+- pyo3 does not support re-initialising modules for
+  python < 3.9 (https://github.com/PyO3/pyo3/commit/f17e70316751285340508d0009103570af7e0873)
+"""
+
 
 @dataclass
 class ResolvedPackage:
@@ -270,7 +277,14 @@ def run_concurrent_python(
 
 def get_file_times(path: Path) -> Tuple[float, float]:
     s = path.stat()
-    return (s.st_atime, s.st_mtime)
+    times = (s.st_atime, s.st_mtime)
+    if platform.system() == "Windows" and platform.python_implementation() == "PyPy":
+        # workaround for https://github.com/pypy/pypy/issues/4916
+        for _ in range(10):
+            set_file_times(path, times)
+            if path.stat().st_mtime == times[1]:
+                break
+    return times
 
 
 def set_file_times_recursive(path: Path, times: Tuple[float, float]) -> None:

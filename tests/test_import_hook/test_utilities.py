@@ -3,6 +3,7 @@ import logging
 import platform
 import re
 import subprocess
+import time
 from pathlib import Path
 from typing import List, cast
 
@@ -400,6 +401,19 @@ def test_get_string_between() -> None:
     assert get_string_between("11aaabbbccc11", "xxx", "ccc") is None
     assert get_string_between("11aaabbbccc11", "aaa", "xxx") is None
     assert get_string_between("11aaabbbccc11", "xxx", "xxx") is None
+
+
+def test_set_file_times(tmp_path: Path) -> None:
+    for _ in range(10):
+        file_a = tmp_path / "a"
+        file_a.touch()
+        time.sleep(0.1)
+        file_b = tmp_path / "b"
+        file_b.touch()
+        assert file_a.stat().st_mtime != file_b.stat().st_mtime
+        times = get_file_times(file_a)
+        set_file_times(file_b, times)
+        assert file_a.stat().st_mtime == file_b.stat().st_mtime
 
 
 def _mock_directory_as_unreadable(dir_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
