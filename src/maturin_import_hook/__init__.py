@@ -20,7 +20,7 @@ def install(
     lock_timeout_seconds: Optional[float] = 120,
     show_warnings: bool = True,
     file_searcher: Optional[project_importer.ProjectFileSearcher] = None,
-    enable_automatic_installation: bool = True,
+    enable_automatic_installation: bool = False,
 ) -> None:
     """Install import hooks for automatically rebuilding and importing maturin projects or .rs files.
 

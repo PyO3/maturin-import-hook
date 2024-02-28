@@ -77,7 +77,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
         build_dir: Optional[Path] = None,
         lock_timeout_seconds: Optional[float] = 120,
         enable_reloading: bool = True,
-        enable_automatic_installation: bool = True,
+        enable_automatic_installation: bool = False,
         force_rebuild: bool = False,
         show_warnings: bool = True,
     ) -> None:
@@ -596,7 +596,7 @@ def install(
     lock_timeout_seconds: Optional[float] = 120,
     show_warnings: bool = True,
     file_searcher: Optional[ProjectFileSearcher] = None,
-    enable_automatic_installation: bool = True,
+    enable_automatic_installation: bool = False,
 ) -> MaturinProjectImporter:
     """Install an import hook for automatically rebuilding editable installed maturin projects.
 
