@@ -83,7 +83,10 @@ def test_install_from_script_inside(workspace: Path, project_name: str) -> None:
 
     check_installed_dir = project_dir / "check_installed"
     check_installed_path = check_installed_dir / "check_installed.py"
-    check_installed_path.write_text(f"{IMPORT_HOOK_HEADER}\n\n{check_installed_path.read_text()}")
+    header = IMPORT_HOOK_HEADER.replace(
+        "maturin_import_hook.install()", "maturin_import_hook.install(enable_automatic_installation=True)"
+    )
+    check_installed_path.write_text(f"{header}\n\n{check_installed_path.read_text()}")
 
     empty_dir = workspace / "empty"
     empty_dir.mkdir()
