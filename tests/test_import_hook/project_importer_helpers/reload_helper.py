@@ -5,6 +5,7 @@ import pickle
 import re
 import sys
 from pathlib import Path
+from typing import Union
 
 import maturin_import_hook
 
@@ -18,7 +19,7 @@ assert rs_path.exists()
 action = sys.argv[2]
 
 
-def _modify_project_num(num: int | str) -> None:
+def _modify_project_num(num: Union[int, str]) -> None:
     source = rs_path.read_text()
     source = re.sub("let num = .*;", f"let num = {num};", source)
     rs_path.write_text(source)

@@ -296,6 +296,19 @@ def capture_logs(log: Optional[logging.Logger] = None, level: int = logging.INFO
         log.removeHandler(handler)
 
 
+def remove_executable_from_path(path: str, executable_name: str) -> str:
+    """filter out the elements of the PATH environment variable that contain an executable with the given name"""
+    log.info("removing %s from PATH = '%s'", executable_name, path)
+    executable_path = shutil.which(executable_name, path=path)
+    while executable_path is not None:
+        executable_dir = Path(executable_path).parent
+        log.info("removing '%s' from PATH", executable_dir)
+        path = os.pathsep.join(path for path in path.split(os.pathsep) if path != str(executable_dir))
+        executable_path = shutil.which(executable_name, path=path)
+    log.info("filtered PATH = '%s'", path)
+    return path
+
+
 def create_echo_script(path: Path, message: str) -> None:
     """create a file that when executed, prints the given message"""
     if platform.system() == "Windows":

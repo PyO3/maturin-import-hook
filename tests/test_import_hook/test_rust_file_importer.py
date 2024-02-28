@@ -1,3 +1,4 @@
+import os
 import platform
 import re
 import shutil
@@ -14,6 +15,7 @@ from .common import (
     get_string_between,
     missing_entrypoint_error_message_pattern,
     remove_ansii_escape_characters,
+    remove_executable_from_path,
     run_concurrent_python,
     run_python,
     set_file_times,
@@ -609,14 +611,18 @@ class TestLogging:
     def test_maturin_detection(self, workspace: Path) -> None:
         rs_path, py_path = self._create_clean_package(workspace / "package")
 
-        output, _ = run_python([str(py_path)], workspace, env={"PATH": ""})
+        env = {"PATH": remove_executable_from_path(os.environ["PATH"], "maturin")}
+
+        output, _ = run_python([str(py_path)], workspace, env=env)
         assert output == "building \"my_script\"\ncaught MaturinError('maturin not found')\n"
 
         extra_bin = workspace / "bin"
         extra_bin.mkdir()
         create_echo_script(extra_bin / "maturin", "maturin 0.1.2")
 
-        output, _ = run_python([str(py_path)], workspace, env={"PATH": str(extra_bin)})
+        env["PATH"] = f"{extra_bin}{os.pathsep}{env['PATH']}"
+
+        output, _ = run_python([str(py_path)], workspace, env=env)
         assert output == (
             'building "my_script"\n'
             "caught MaturinError('unsupported maturin version: (0, 1, 2). "

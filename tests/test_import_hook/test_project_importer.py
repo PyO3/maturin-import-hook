@@ -26,6 +26,7 @@ from .common import (
     missing_entrypoint_error_message_pattern,
     mixed_test_crate_names,
     remove_ansii_escape_characters,
+    remove_executable_from_path,
     run_concurrent_python,
     run_python,
     run_python_code,
@@ -1045,14 +1046,17 @@ class TestLogging:
     def test_maturin_detection(self, workspace: Path) -> None:
         self._create_clean_project(workspace, True)
 
-        output, _ = run_python_code(self._logging_helper(), env={"PATH": ""})
+        env = {"PATH": remove_executable_from_path(os.environ["PATH"], "maturin")}
+
+        output, _ = run_python_code(self._logging_helper(), env=env)
         assert output == "building \"test_project\"\ncaught MaturinError('maturin not found')\n"
 
         extra_bin = workspace / "bin"
         extra_bin.mkdir()
         create_echo_script(extra_bin / "maturin", "maturin 0.1.2")
 
-        output, _ = run_python_code(self._logging_helper(), env={"PATH": str(extra_bin)})
+        env["PATH"] = f"{extra_bin}{os.pathsep}{env['PATH']}"
+        output, _ = run_python_code(self._logging_helper(), env=env)
         assert output == (
             'building "test_project"\n'
             "caught MaturinError('unsupported maturin version: (0, 1, 2). "
