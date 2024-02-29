@@ -3,10 +3,12 @@
 These tests ensure that the import hook behaves correctly when installing a wide variety of different crates.
 
 The recommended way to run the tests is to run:
+
 ```bash
 git submodule update ./maturin
 python runner.py
 ```
+
 This script will create an isolated environment for the tests to run in
 and produce a html report from the test results (see `runner.py --help` for options).
 
@@ -26,6 +28,7 @@ To ensure even more isolation than the runner script, you can use [act](https://
 of this repository locally.
 
 ## Maintenance
+
 To update maturin:
 
 - update the submodule to the maturin commit you want to update to
@@ -35,19 +38,21 @@ To update maturin:
   If so, add them to `IGNORED_TEST_CRATES` in `common.py`
 - update the version check in the import hook to ensure it allows using the new version
 
-
 ## Notes
 
 ### Debugging
+
 The tests can be tricky to debug because they require spawning one or more python instances. One option is to use
 remote debugging with [debugpy](https://pypi.org/project/debugpy/).
 
 First, install debugpy into the test virtualenv:
-```
+
+```shell
 test_workspace/venv/bin/python -m pip install debugpy
 ```
 
 Add the following line in a helper script that you want to debug, or inside `maturin_import_hook` itself
+
 ```python
 import debugpy; debugpy.listen(5678); debugpy.wait_for_client(); debugpy.breakpoint()
 ```
@@ -59,12 +64,13 @@ Connect to the debugger, eg [using vscode](https://code.visualstudio.com/docs/py
 Note: set `CLEAR_WORKSPACE = False` in `common.py` if you want to prevent the temporary files generated during the test
 from being cleared.
 
-
 ### Caching
+
 sccache is a tool for caching build artifacts to speed up compilation. Unfortunately, it is currently useless for these
 tests as it [cannot cache cdylib crates](https://github.com/mozilla/sccache/issues/1715)
 
 To run with sccache anyway (to check if the situation has improved):
+
 ```bash
 sccache --stop-server  # so the tests use a separate empty sccache
 # sccache cannot cache incremental compilation, so disable it: https://github.com/mozilla/sccache/issues/236
@@ -72,13 +78,13 @@ RUSTC_WRAPPER=sccache SCCACHE_DIR=/tmp/sccache CARGO_INCREMENTAL=0 python test_r
 sccache --show-stats
 ```
 
-
 ### Faster Linking
+
 You can use `lld` for linking using the `--lld` argument to the test runner. This usually provides a speed increase
 but not a huge one as linking is not a huge bottleneck in the testing.
 
-
 ### Profiling
+
 you can run the test runner with the `--profile <path>` argument to run the tests with `cProfile`. The majority of the
 total time is spent waiting for subprocesses and isn't very interesting.
 

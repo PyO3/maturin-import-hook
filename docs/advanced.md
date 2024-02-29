@@ -2,6 +2,7 @@
 
 The import hook classes can be subclassed to further customize to specific use cases.
 For example settings can be configured per-project or loaded from configuration files.
+
 ```python
 import sys
 from pathlib import Path

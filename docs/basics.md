@@ -11,9 +11,10 @@ layouts as well as importing standalone `.rs` files.
 ## Installation
 
 Install into a virtual environment then install so that the import hook is always active.
+
 ```shell
-$ pip install maturin_import_hook
-$ python -m maturin_import_hook site install  # install into the active environment
+pip install maturin_import_hook
+python -m maturin_import_hook site install  # install into the active environment
 ```
 
 Alternatively, instead of using `site install`, put calls to `maturin_import_hook.install()` into any script where you
@@ -40,6 +41,7 @@ import subpackage.my_rust_script
 ```
 
 The maturin project importer and the rust file importer can be used separately
+
 ```python
 from maturin_import_hook import rust_file_importer
 rust_file_importer.install()
@@ -49,6 +51,7 @@ project_importer.install()
 ```
 
 The import hook can be configured to control its behaviour
+
 ```python
 import maturin_import_hook
 from maturin_import_hook.settings import MaturinSettings
@@ -77,6 +80,7 @@ Installation into `sitecustomize.py` can be managed with the import hook cli usi
 `python -m maturin_import_hook site install`. The CLI can also manage uninstallation.
 
 ## Environment Variables
+
 The import hook can be disabled by setting `MATURIN_IMPORT_HOOK_ENABLED=0`. This can be used to disable
 the import hook in production if you want to leave calls to `import_hook.install()` in place.
 
@@ -84,15 +88,15 @@ Build files will be stored in an appropriate place for the current system but ca
 by setting `MATURIN_BUILD_DIR`. These files can be deleted without causing any issues (unless a build is in progress).
 The precedence for storing build files is:
 
-* `MATURIN_BUILD_DIR`
-* `<virtualenv_dir>/maturin_build_cache`
-* `<system_cache_dir>/maturin_build_cache`
-    * e.g. `~/.cache/maturin_build_cache` on POSIX
+- `MATURIN_BUILD_DIR`
+- `<virtualenv_dir>/maturin_build_cache`
+- `<system_cache_dir>/maturin_build_cache`
+    - e.g. `~/.cache/maturin_build_cache` on POSIX
 
 See the location being used with the CLI: `python -m maturin_import_hook cache info`
 
-
 ## Logging
+
 By default the `maturin_import_hook` logger does not propagate to the root logger. This is so that `INFO` level messages
 are shown to the user without them having to configure logging (`INFO` level is normally not visible). The import hook
 also has extensive `DEBUG` level logging that generally would be more noise than useful. So by not propagating, `DEBUG`
@@ -104,6 +108,7 @@ the messages as normal.
 When debugging issues with the import hook, you should first call `reset_logger()` then configure the root logger
 to show `DEBUG` messages. You can also run with the environment variable `RUST_LOG=maturin=debug` to get more
 information from maturin.
+
 ```python
 import logging
 logging.basicConfig(format='%(name)s [%(levelname)s] %(message)s', level=logging.DEBUG)
