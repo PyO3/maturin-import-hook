@@ -79,6 +79,15 @@ in every script, meaning the scripts do not need alteration before deployment.
 Installation into `sitecustomize.py` can be managed with the import hook cli using
 `python -m maturin_import_hook site install`. The CLI can also manage uninstallation.
 
+## CLI
+
+The package provides a CLI interface for getting information such as the location and size of the build cache and
+managing the installation into `sitecustomize.py`. For details, run:
+
+```shell
+python -m maturin_import_hook --help
+```
+
 ## Environment Variables
 
 The import hook can be disabled by setting `MATURIN_IMPORT_HOOK_ENABLED=0`. This can be used to disable
