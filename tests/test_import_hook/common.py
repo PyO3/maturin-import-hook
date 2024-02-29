@@ -122,6 +122,12 @@ def mixed_test_crate_names() -> List[str]:
     return [name for name in all_usable_test_crate_names() if "mixed" in name]
 
 
+class PythonProcessError(RuntimeError):
+    def __init__(self, output: str) -> None:
+        super().__init__("run_python failed")
+        self.output = output
+
+
 def run_python(
     args: List[str],
     cwd: Path,
@@ -150,7 +156,7 @@ def run_python(
         output = proc.stdout.decode()
     except subprocess.CalledProcessError as e:
         output = e.stdout.decode()
-        if not quiet and not expect_error:
+        if not expect_error:
             message = "\n".join([
                 "-" * 40,
                 "Called Process Error:",
@@ -159,12 +165,12 @@ def run_python(
                 output,
                 "-" * 40,
             ])
-            log.info(message)
-        if not expect_error:
+            if not quiet:
+                log.info(message)
+
             # re-raising the CalledProcessError would cause
             # unnecessary output since we are already printing it above
-            msg = "run_python failed"
-            raise RuntimeError(msg) from None
+            raise PythonProcessError(message) from None
     duration = time.perf_counter() - start
 
     output = output.replace("\r\n", "\n")
@@ -256,10 +262,8 @@ def run_concurrent_python(
         for proc in processes:
             try:
                 output, duration = proc.get()
-            except subprocess.CalledProcessError as e:
-                stdout = "None" if e.stdout is None else e.stdout.decode()
-                stderr = "None" if e.stderr is None else e.stderr.decode()
-                output = "\n".join(["-" * 50, "Stdout:", stdout, "Stderr:", stderr, "-" * 50])
+            except PythonProcessError as e:
+                output = e.output
                 success = False
                 duration = None
             else:
