@@ -136,14 +136,16 @@ def run_python(
     expect_error: bool = False,
     profile: Optional[Path] = None,
     env: Optional[Dict[str, Any]] = None,
+    interpreter: Optional[Path] = None,
 ) -> Tuple[str, float]:
     start = time.perf_counter()
 
-    cmd = [sys.executable]
+    interpreter_path = sys.executable if interpreter is None else str(interpreter)
+    cmd = [interpreter_path]
     if profile is not None:
         cmd += ["-m", "cProfile", "-o", str(profile.resolve())]
     cmd.extend(args)
-    log.info("running python")
+    log.info("running python ('%s')", interpreter_path)
     try:
         proc = subprocess.run(
             cmd,
@@ -192,6 +194,7 @@ def run_python_code(
     quiet: bool = False,
     expect_error: bool = False,
     env: Optional[Dict[str, Any]] = None,
+    interpreter: Optional[Path] = None,
 ) -> Tuple[str, float]:
     with tempfile.TemporaryDirectory("run_python_code") as tmpdir_str:
         tmpdir = Path(tmpdir_str)
@@ -208,6 +211,7 @@ def run_python_code(
             quiet=quiet,
             expect_error=expect_error,
             env=env,
+            interpreter=interpreter,
         )
 
 

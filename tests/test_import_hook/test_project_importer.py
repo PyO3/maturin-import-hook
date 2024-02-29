@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import platform
 import re
 import shutil
 import site
@@ -357,6 +358,10 @@ def test_concurrent_import(workspace: Path, initially_mixed: bool, mixed: bool) 
     _get_project_copy(TEST_CRATES_DIR / project_name, project_dir)
 
     args = {"python_script": check_installed_with_hook, "quiet": True}
+
+    if platform.system() == "Windows" and platform.python_implementation() == "PyPy":
+        # workaround for https://github.com/pypy/pypy/issues/4917
+        args["interpreter"] = Path(sys.executable)
 
     outputs = run_concurrent_python(3, run_python_code, args)
 

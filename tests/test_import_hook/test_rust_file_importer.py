@@ -1,6 +1,8 @@
 import os
+import platform
 import re
 import shutil
+import sys
 from pathlib import Path
 from textwrap import dedent
 from typing import Tuple
@@ -97,6 +99,10 @@ def test_concurrent_import() -> None:
         "cwd": script_dir,
         "quiet": True,
     }
+
+    if platform.system() == "Windows" and platform.python_implementation() == "PyPy":
+        # workaround for https://github.com/pypy/pypy/issues/4917
+        args["interpreter"] = Path(sys.executable)
 
     outputs = run_concurrent_python(3, run_python, args)
 
