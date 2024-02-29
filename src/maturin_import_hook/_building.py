@@ -84,7 +84,7 @@ class LockedBuildCache:
 
 class BuildCache:
     def __init__(self, build_dir: Optional[Path], lock_timeout_seconds: Optional[float]) -> None:
-        self._build_dir = build_dir if build_dir is not None else _get_default_build_dir()
+        self._build_dir = build_dir if build_dir is not None else get_default_build_dir()
         self._lock = filelock.FileLock(
             self._build_dir / "lock", timeout=-1 if lock_timeout_seconds is None else lock_timeout_seconds
         )
@@ -115,7 +115,7 @@ def _acquire_lock(lock: filelock.FileLock) -> Generator[None, None, None]:
         raise ImportHookError(message) from None
 
 
-def _get_default_build_dir() -> Path:
+def get_default_build_dir() -> Path:
     build_dir = os.environ.get("MATURIN_BUILD_DIR", None)
     if build_dir:
         shared_build_dir = Path(build_dir)

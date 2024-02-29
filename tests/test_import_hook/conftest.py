@@ -6,7 +6,7 @@ from typing import Iterator
 
 import pytest
 from maturin_import_hook import reset_logger
-from maturin_import_hook._building import _get_default_build_dir
+from maturin_import_hook._building import get_default_build_dir
 
 from .common import CLEAR_WORKSPACE
 
@@ -31,7 +31,7 @@ def workspace(tmp_path: Path) -> Iterator[Path]:
 
 @pytest.fixture(autouse=True)
 def _clean_build_cache() -> None:
-    build_dir = _get_default_build_dir()
+    build_dir = get_default_build_dir()
     if build_dir.exists():
         log.info("clearing build cache at %s", build_dir)
         shutil.rmtree(build_dir)
