@@ -1,5 +1,12 @@
 # Reloading
 
+This document outlines the implementation details of how the import hook supports `importlib.reload()`. From a user's
+perspective the important thing is that `importlib.reload()` should do what you expect (with some caveats) when the
+import hook is active
+
+
+# Reloading Details
+
 Regular python modules can be reloaded with [`importlib.reload()`](https://docs.python.org/3/library/importlib.html#importlib.reload)
 to load changes to the source code without restarting the python interpreter.
 This mechanism is used by the [`%autoreload` IPython extension](https://ipython.readthedocs.io/en/stable/config/extensions/autoreload.html)

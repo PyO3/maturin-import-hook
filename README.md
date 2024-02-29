@@ -12,18 +12,29 @@ After installing `maturin`, install the import hook into a python virtual enviro
 ```shell
 $ pip install maturin_import_hook
 ```
-
-Then run the following command to install the import hook into [sitecustomize.py](https://docs.python.org/3/library/site.html#module-sitecustomize)
-so that it activates automatically:
+Then, optionally make the hook activate automatically with:
 ```shell
 $ python -m maturin_import_hook site install
 ```
-This only has to be run once for each virtual environment. Uninstall with `python -m maturin_import_hook site uninstall`
+This only has to be run once for each virtual environment.
 
-Or alternatively, put the following at the top of each python script where you want the import hook to be active:
+Alternatively, put the following at the top of each python script where you want to use the hook:
 ```python
 import maturin_import_hook
+
+# install the import hook with default settings.
+# this call must be before any imports that you want the hook to be active for.
 maturin_import_hook.install()
+
+# when a rust package that is installed in editable mode is imported,
+# that package will be automatically recompiled if necessary.
+import pyo3_pure
+
+# when a .rs file is imported a project will be created for it in the
+# maturin build cache and the resulting library will be loaded.
+#
+# assuming subpackage/my_rust_script.rs defines a pyo3 module:
+import subpackage.my_rust_script
 ```
 
 Once the hook is active, any `import` statement that imports an editable-installed maturin project will be
