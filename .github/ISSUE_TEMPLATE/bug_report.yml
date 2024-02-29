@@ -1,0 +1,45 @@
+name: 🐛 Bug Report
+description: Create a bug report
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time to fill out this bug report!
+        Please fill out the form below...
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      placeholder: The bug is...
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: Please list the exact steps required to reproduce your error. Try to narrow down to the smallest example that still triggers the issue. Enable debug logging (see [README](https://github.com/PyO3/maturin-import-hook/blob/main/README.md)) and share the output, either in a codeblock or as a [gist](https://gist.github.com/)
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: versions
+    attributes:
+      label: Please provide the output of `python -m maturin_import_hook version` (or provide manually)
+      placeholder: |
+        OS: Linux-6.6.18-1-lts-x86_64-with-glibc2.39
+        Python: CPython 3.11.7
+        maturin-import-hook: 0.1.0
+        maturin: maturin 1.4.0
+        rustc: rustc 1.76.0 (07dca489a 2024-02-04)
+        pip: 23.3.2
+  - type: checkboxes
+    id: buildable
+    attributes:
+      label: Does `maturin develop` work when run manually for your project?
+      options:
+        - label: Yes/No (leave blank if not applicable)
+          required: false
