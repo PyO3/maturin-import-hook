@@ -1,0 +1,93 @@
+[project]
+name = "maturin-import-hook"
+description = "import hook to load rust projects built with maturin"
+authors = [
+    {name = "Matthew Broadway", email = "mattdbway@gmail.com"}
+]
+readme = "README.md"
+version = "0.1.0"
+requires-python = ">=3.8"
+dependencies = [
+    "filelock",
+    "tomli>=1.1.0 ; python_version<'3.11'"
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Build Tools",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License"
+]
+
+[project.urls]
+Homepage = "https://github.com/PyO3/maturin-import-hook"
+# TODO(matt): should the import hook have its own documentation
+Documentation = "https://maturin.rs"
+Repository = "https://github.com/PyO3/maturin-import-hook.git"
+Issues = "https://github.com/PyO3/maturin-import-hook/issues"
+Changelog = "https://github.com/PyO3/maturin-import-hook/blob/main/Changelog.md"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py38"
+
+[tool.ruff.format]
+preview = true
+
+[tool.ruff.lint]
+select = ["ALL"]
+
+# https://docs.astral.sh/ruff/rules/
+ignore = [
+    "ANN101",  # missing-type-self
+    "ARG",     # flake8-unused-arguments
+    "C901",    # complex-structure
+    "COM",     # flake8-commas
+    "D",       # pydocstyle
+    "FA",      # flake8-future-annotations
+    "FBT",     # flake8-boolean-trap
+    "FIX",     # flake8-fixme
+    "ISC001",  # single-line-implicit-string-concatenation  (disabled to avoid clashing with formatter)
+    "PLR0911", # too-many-return-statements
+    "PLR0912", # too-many-branches
+    "PLR0913", # too-many-arguments
+    "PLR0915", # too-many-statements
+    "PLR2004", # magic-value-comparison
+    "PLW0603", # global-statement
+    "RET505",  # superfluous-else-return
+    "S101",    # assert
+    "S301",    # suspicious-pickle-usage
+    "S324",    # hashlib-insecure-hash-function
+    "S603",    # subprocess-without-shell-equals-true
+    "S607",    # start-process-with-partial-path
+    "T201",    # print
+    "TD003",   # missing-todo-link
+]
+
+[tool.mypy]
+python_version = "3.8"
+strict = true
+allow_redefinition = true
+exclude = [
+    "tests/maturin",
+    "tests/test_import_hook/file_importer_helpers",
+    "tests/test_import_hook/project_importer_helpers"
+]
+
+[tool.pytest.ini_options]
+addopts = "--ignore tests/maturin --capture=no -v"
+testpaths = ["tests"]
+junit_logging = "all"
+junit_log_passing_tests = false
+# total includes setup and teardown
+junit_duration_report = "total"
+junit_family = "xunit2"
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"

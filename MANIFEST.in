@@ -1,0 +1,4 @@
+include README.md
+include license-apache
+include license-mit
+include src/maturin_import_hook/py.typed
