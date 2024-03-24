@@ -24,7 +24,6 @@ from maturin_import_hook._building import (
     LockedBuildCache,
     develop_build_project,
     find_maturin,
-    fix_direct_url,
     get_installation_freshness,
     get_installation_mtime,
     maturin_output_has_warnings,
@@ -99,7 +98,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
     def find_maturin(self) -> Path:
         """this method can be overridden to specify an alternative maturin binary to use"""
         if self._maturin_path is None:
-            self._maturin_path = find_maturin((1, 4, 0), (2, 0, 0))
+            self._maturin_path = find_maturin((1, 5, 0), (2, 0, 0))
         return self._maturin_path
 
     def find_spec(
@@ -250,7 +249,6 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
             logger.info('building "%s"', package_name)
             start = time.perf_counter()
             maturin_output = develop_build_project(self.find_maturin(), resolved.cargo_manifest_path, settings)
-            fix_direct_url(project_dir, package_name)
             logger.debug(
                 'compiled project "%s" in %.3fs',
                 package_name,

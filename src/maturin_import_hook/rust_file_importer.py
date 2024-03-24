@@ -62,7 +62,7 @@ class MaturinRustFileImporter(importlib.abc.MetaPathFinder):
     def find_maturin(self) -> Path:
         """this method can be overridden to specify an alternative maturin binary to use"""
         if self._maturin_path is None:
-            self._maturin_path = find_maturin((1, 4, 0), (2, 0, 0))
+            self._maturin_path = find_maturin((1, 5, 0), (2, 0, 0))
         return self._maturin_path
 
     def get_source_files(self, source_path: Path) -> Iterator[Path]:

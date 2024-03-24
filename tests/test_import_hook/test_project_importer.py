@@ -12,7 +12,6 @@ from textwrap import dedent
 from typing import Iterator, Set, Tuple
 
 import pytest
-from maturin_import_hook._building import fix_direct_url
 from maturin_import_hook.project_importer import DefaultProjectFileSearcher, _load_dist_info
 
 from .common import (
@@ -1378,8 +1377,6 @@ def _install_editable(project_dir: Path) -> None:
     env = os.environ.copy()
     env["VIRTUAL_ENV"] = sys.exec_prefix
     subprocess.check_call([maturin_path, "develop"], cwd=project_dir, env=env)
-    # TODO(matt): remove once maturin develop creates editable installs
-    fix_direct_url(project_dir, with_underscores(project_dir.name))
 
 
 def _install_non_editable(project_dir: Path) -> None:
