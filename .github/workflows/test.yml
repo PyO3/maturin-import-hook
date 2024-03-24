@@ -152,7 +152,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.platform.python-version }}
-          architecture: "x64"
           cache: "pip"
       - uses: dtolnay/rust-toolchain@stable
         id: rustup
