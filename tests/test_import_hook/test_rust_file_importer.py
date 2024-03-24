@@ -632,7 +632,7 @@ class TestLogging:
         assert output == (
             'building "my_script"\n'
             "caught MaturinError('unsupported maturin version: (0, 1, 2). "
-            "Import hook requires >=(1, 4, 0),<(2, 0, 0)')\n"
+            "Import hook requires >=(1, 5, 0),<(2, 0, 0)')\n"
         )
 
     def test_default_rebuild(self, workspace: Path) -> None:

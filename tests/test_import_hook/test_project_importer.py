@@ -449,16 +449,17 @@ def test_rebuild_on_change_to_path_dependency(workspace: Path) -> None:
     _install_editable(project_dir)
     assert _is_editable_installed_correctly(project_name, project_dir, True)
 
-    check_installed = dedent(f"""\
-    {IMPORT_HOOK_HEADER}
+    check_installed = "{}\n{}".format(
+        IMPORT_HOOK_HEADER,
+        dedent("""\
+        import pyo3_mixed_with_path_dep
 
-    import pyo3_mixed_with_path_dep
+        assert pyo3_mixed_with_path_dep.get_42() == 42, 'get_42 did not return 42'
 
-    assert pyo3_mixed_with_path_dep.get_42() == 42, 'get_42 did not return 42'
-
-    print('21 is half 42:', pyo3_mixed_with_path_dep.is_half(21, 42))
-    print('21 is half 63:', pyo3_mixed_with_path_dep.is_half(21, 63))
-    """)
+        print('21 is half 42:', pyo3_mixed_with_path_dep.is_half(21, 42))
+        print('21 is half 63:', pyo3_mixed_with_path_dep.is_half(21, 63))
+        """),
+    )
 
     output1, duration1 = run_python_code(check_installed)
     assert "21 is half 42: True" in output1
@@ -1066,7 +1067,7 @@ class TestLogging:
         assert output == (
             'building "test_project"\n'
             "caught MaturinError('unsupported maturin version: (0, 1, 2). "
-            "Import hook requires >=(1, 4, 0),<(2, 0, 0)')\n"
+            "Import hook requires >=(1, 5, 0),<(2, 0, 0)')\n"
         )
 
     @pytest.mark.parametrize("is_mixed", [False, True])
