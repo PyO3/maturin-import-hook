@@ -5,7 +5,6 @@ import platform
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Dict
 
 from maturin_import_hook._building import get_default_build_dir
 from maturin_import_hook._site import (
@@ -119,7 +118,7 @@ def _dir_size_mib(dir_path: Path) -> str:
     return f"{cache_size / (1024 * 1024):.2f} MiB"
 
 
-def _print_info(info: Dict[str, object], format_name: str) -> None:
+def _print_info(info: dict[str, object], format_name: str) -> None:
     if format_name == "text":
         for k, v in info.items():
             print(f"{k}: {v}")

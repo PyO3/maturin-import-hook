@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Set
+from typing import Optional
 
 __all__ = [
     "MaturinSettings",
@@ -17,7 +17,7 @@ class MaturinSettings:
     quiet: bool = False
     jobs: Optional[int] = None
     profile: Optional[str] = None
-    features: Optional[List[str]] = None
+    features: Optional[list[str]] = None
     all_features: bool = False
     no_default_features: bool = False
     target: Optional[str] = None
@@ -26,13 +26,13 @@ class MaturinSettings:
     frozen: bool = False
     locked: bool = False
     offline: bool = False
-    config: Optional[Dict[str, str]] = None
-    unstable_flags: Optional[List[str]] = None
+    config: Optional[dict[str, str]] = None
+    unstable_flags: Optional[list[str]] = None
     verbose: int = 0
-    rustc_flags: Optional[List[str]] = None
+    rustc_flags: Optional[list[str]] = None
 
     @staticmethod
-    def supported_commands() -> Set[str]:
+    def supported_commands() -> set[str]:
         return {"build", "develop"}
 
     @staticmethod
@@ -42,7 +42,7 @@ class MaturinSettings:
             color=True,
         )
 
-    def to_args(self) -> List[str]:
+    def to_args(self) -> list[str]:
         args = []
         if self.release:
             args.append("--release")
@@ -103,10 +103,10 @@ class MaturinBuildSettings(MaturinSettings):
     zig: bool = False
 
     @staticmethod
-    def supported_commands() -> Set[str]:
+    def supported_commands() -> set[str]:
         return {"build"}
 
-    def to_args(self) -> List[str]:
+    def to_args(self) -> list[str]:
         args = []
         if self.skip_auditwheel:
             args.append("--skip-auditwheel")
@@ -120,14 +120,14 @@ class MaturinBuildSettings(MaturinSettings):
 class MaturinDevelopSettings(MaturinSettings):
     """settings for `maturin develop`."""
 
-    extras: Optional[List[str]] = None
+    extras: Optional[list[str]] = None
     skip_install: bool = False
 
     @staticmethod
-    def supported_commands() -> Set[str]:
+    def supported_commands() -> set[str]:
         return {"develop"}
 
-    def to_args(self) -> List[str]:
+    def to_args(self) -> list[str]:
         args = []
         if self.extras is not None:
             args.append("--extras")

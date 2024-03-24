@@ -9,10 +9,11 @@ import shutil
 import sys
 import tempfile
 import time
+from collections.abc import Iterator, Sequence
 from importlib.machinery import ExtensionFileLoader, ModuleSpec
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING, Iterator, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 from maturin_import_hook._building import (
     BuildCache,
@@ -189,7 +190,7 @@ class MaturinRustFileImporter(importlib.abc.MetaPathFinder):
 
     def _import_rust_file(
         self, module_path: str, module_name: str, file_path: Path
-    ) -> Tuple[Optional[ModuleSpec], bool]:
+    ) -> tuple[Optional[ModuleSpec], bool]:
         logger.debug('importing rust file "%s" as "%s"', file_path, module_path)
 
         with self._build_cache.lock() as build_cache:
@@ -250,7 +251,7 @@ class MaturinRustFileImporter(importlib.abc.MetaPathFinder):
         source_path: Path,
         settings: MaturinSettings,
         build_cache: LockedBuildCache,
-    ) -> Tuple[Optional[ModuleSpec], Optional[str]]:
+    ) -> tuple[Optional[ModuleSpec], Optional[str]]:
         """Return a spec for the given module at the given search_dir if it exists and is newer than the source
         code that it is derived from.
         """

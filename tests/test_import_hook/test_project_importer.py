@@ -7,9 +7,9 @@ import shutil
 import site
 import subprocess
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 from textwrap import dedent
-from typing import Iterator, Set, Tuple
 
 import pytest
 from maturin_import_hook.project_importer import DefaultProjectFileSearcher, _load_dist_info
@@ -591,7 +591,7 @@ class TestReload:
     """
 
     @staticmethod
-    def _create_reload_project(output_dir: Path, mixed: bool) -> Tuple[Path, Path]:
+    def _create_reload_project(output_dir: Path, mixed: bool) -> tuple[Path, Path]:
         project_dir = _create_project_from_blank_template("my-project", output_dir / "my-project", mixed=mixed)
         if mixed:
             init = dedent("""\
@@ -1354,7 +1354,7 @@ def _uninstall(*project_names: str) -> None:
     ])
 
 
-def _get_installed_package_names() -> Set[str]:
+def _get_installed_package_names() -> set[str]:
     packages = json.loads(
         subprocess.check_output([
             sys.executable,

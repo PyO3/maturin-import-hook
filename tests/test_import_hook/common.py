@@ -10,11 +10,12 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from io import StringIO
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, TypeVar
+from typing import Any, Callable, Optional, TypeVar
 
 script_dir = Path(__file__).resolve().parent
 log = logging.getLogger(__name__)
@@ -59,7 +60,7 @@ class ResolvedPackage:
     python_module: Optional[Path]
 
     @staticmethod
-    def from_dict(data: Dict[str, Any]) -> "ResolvedPackage":
+    def from_dict(data: dict[str, Any]) -> "ResolvedPackage":
         return ResolvedPackage(
             cargo_manifest_path=Path(data["cargo_manifest_path"]),
             extension_module_dir=map_optional(data["extension_module_dir"], Path),
@@ -72,10 +73,10 @@ class ResolvedPackage:
         return json.dumps({k: str(v) for k, v in dataclasses.asdict(self).items()}, indent=2, sort_keys=True)
 
 
-_RESOLVED_PACKAGES: Optional[Dict[str, Optional[ResolvedPackage]]] = None
+_RESOLVED_PACKAGES: Optional[dict[str, Optional[ResolvedPackage]]] = None
 
 
-def resolved_packages() -> Dict[str, Optional[ResolvedPackage]]:
+def resolved_packages() -> dict[str, Optional[ResolvedPackage]]:
     global _RESOLVED_PACKAGES
     if _RESOLVED_PACKAGES is None:
         with (script_dir / "../resolved.json").open() as f:
@@ -109,7 +110,7 @@ def with_underscores(project_name: str) -> str:
     return project_name.replace("-", "_")
 
 
-def all_usable_test_crate_names() -> List[str]:
+def all_usable_test_crate_names() -> list[str]:
     return sorted(
         p.name
         for p in TEST_CRATES_DIR.iterdir()
@@ -118,7 +119,7 @@ def all_usable_test_crate_names() -> List[str]:
     )
 
 
-def mixed_test_crate_names() -> List[str]:
+def mixed_test_crate_names() -> list[str]:
     return [name for name in all_usable_test_crate_names() if "mixed" in name]
 
 
@@ -129,15 +130,15 @@ class PythonProcessError(RuntimeError):
 
 
 def run_python(
-    args: List[str],
+    args: list[str],
     cwd: Path,
     *,
     quiet: bool = False,
     expect_error: bool = False,
     profile: Optional[Path] = None,
-    env: Optional[Dict[str, Any]] = None,
+    env: Optional[dict[str, Any]] = None,
     interpreter: Optional[Path] = None,
-) -> Tuple[str, float]:
+) -> tuple[str, float]:
     start = time.perf_counter()
 
     interpreter_path = sys.executable if interpreter is None else str(interpreter)
@@ -189,13 +190,13 @@ def run_python(
 def run_python_code(
     python_script: str,
     *,
-    args: Optional[List[str]] = None,
+    args: Optional[list[str]] = None,
     cwd: Optional[Path] = None,
     quiet: bool = False,
     expect_error: bool = False,
-    env: Optional[Dict[str, Any]] = None,
+    env: Optional[dict[str, Any]] = None,
     interpreter: Optional[Path] = None,
-) -> Tuple[str, float]:
+) -> tuple[str, float]:
     with tempfile.TemporaryDirectory("run_python_code") as tmpdir_str:
         tmpdir = Path(tmpdir_str)
         tmp_script_path = tmpdir / "script.py"
@@ -257,9 +258,9 @@ class PythonProcessOutput:
 
 
 def run_concurrent_python(
-    num: int, func: Callable[..., Tuple[str, float]], args: Dict[str, Any]
-) -> List[PythonProcessOutput]:
-    outputs: List[PythonProcessOutput] = []
+    num: int, func: Callable[..., tuple[str, float]], args: dict[str, Any]
+) -> list[PythonProcessOutput]:
+    outputs: list[PythonProcessOutput] = []
     with multiprocessing.Pool(processes=num) as pool:
         processes = [pool.apply_async(func, kwds=args) for _ in range(num)]
 
@@ -283,7 +284,7 @@ def run_concurrent_python(
     return outputs
 
 
-def get_file_times(path: Path) -> Tuple[float, float]:
+def get_file_times(path: Path) -> tuple[float, float]:
     s = path.stat()
     times = (s.st_atime, s.st_mtime)
     if platform.system() == "Windows" and platform.python_implementation() == "PyPy":
@@ -295,12 +296,12 @@ def get_file_times(path: Path) -> Tuple[float, float]:
     return times
 
 
-def set_file_times_recursive(path: Path, times: Tuple[float, float]) -> None:
+def set_file_times_recursive(path: Path, times: tuple[float, float]) -> None:
     for p in path.rglob("*"):
         os.utime(p, times)
 
 
-def set_file_times(path: Path, times: Tuple[float, float]) -> None:
+def set_file_times(path: Path, times: tuple[float, float]) -> None:
     os.utime(path, times)
 
 

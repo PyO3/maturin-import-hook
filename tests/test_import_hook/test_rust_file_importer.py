@@ -5,7 +5,6 @@ import shutil
 import sys
 from pathlib import Path
 from textwrap import dedent
-from typing import Tuple
 
 import pytest
 
@@ -605,7 +604,7 @@ class TestReload:
 class TestLogging:
     """test the desired messages are visible to the user in the default logging configuration."""
 
-    def _create_clean_package(self, package_path: Path, *, reload_helper: bool = False) -> Tuple[Path, Path]:
+    def _create_clean_package(self, package_path: Path, *, reload_helper: bool = False) -> tuple[Path, Path]:
         package_path.mkdir()
         rs_path = Path(shutil.copy(helpers_dir / "my_script_1.rs", package_path / "my_script.rs"))
         if reload_helper:
