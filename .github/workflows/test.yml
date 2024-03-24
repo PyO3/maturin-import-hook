@@ -10,7 +10,7 @@ on:
         options:
         - all
         - ubuntu-latest
-        - macos-13  # TODO(matt): switch to 14 once this is fixed: https://github.com/actions/setup-python/issues/825
+        - macos-14
         - windows-latest
       python_version:
         type: choice

@@ -23,7 +23,6 @@ classifiers = [
 
 [project.urls]
 Homepage = "https://github.com/PyO3/maturin-import-hook"
-# TODO(matt): should the import hook have its own documentation
 Documentation = "https://maturin.rs"
 Repository = "https://github.com/PyO3/maturin-import-hook.git"
 Issues = "https://github.com/PyO3/maturin-import-hook/issues"
