@@ -13,10 +13,11 @@ import time
 import urllib.parse
 import urllib.request
 from abc import ABC, abstractmethod
+from collections.abc import Iterator, Sequence
 from importlib.machinery import ExtensionFileLoader, ModuleSpec, PathFinder
 from pathlib import Path
 from types import ModuleType
-from typing import ClassVar, Iterator, List, Optional, Sequence, Set, Tuple, Union
+from typing import ClassVar, Optional, Union
 
 from maturin_import_hook._building import (
     BuildCache,
@@ -24,7 +25,6 @@ from maturin_import_hook._building import (
     LockedBuildCache,
     develop_build_project,
     find_maturin,
-    fix_direct_url,
     get_installation_freshness,
     get_installation_mtime,
     maturin_output_has_warnings,
@@ -54,7 +54,7 @@ class ProjectFileSearcher(ABC):
     def get_source_paths(
         self,
         project_dir: Path,
-        all_path_dependencies: List[Path],
+        all_path_dependencies: list[Path],
         installed_package_root: Path,
     ) -> Iterator[Path]:
         """find the files corresponding to the source code of the given project"""
@@ -99,7 +99,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
     def find_maturin(self) -> Path:
         """this method can be overridden to specify an alternative maturin binary to use"""
         if self._maturin_path is None:
-            self._maturin_path = find_maturin((1, 4, 0), (2, 0, 0))
+            self._maturin_path = find_maturin((1, 5, 0), (2, 0, 0))
         return self._maturin_path
 
     def find_spec(
@@ -212,7 +212,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
         self,
         package_name: str,
         project_dir: Path,
-    ) -> Tuple[Optional[ModuleSpec], bool]:
+    ) -> tuple[Optional[ModuleSpec], bool]:
         resolved = self._resolver.resolve(project_dir)
         if resolved is None:
             return None, False
@@ -250,7 +250,6 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
             logger.info('building "%s"', package_name)
             start = time.perf_counter()
             maturin_output = develop_build_project(self.find_maturin(), resolved.cargo_manifest_path, settings)
-            fix_direct_url(project_dir, package_name)
             logger.debug(
                 'compiled project "%s" in %.3fs',
                 package_name,
@@ -285,7 +284,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
         resolved: MaturinProject,
         settings: MaturinSettings,
         build_cache: LockedBuildCache,
-    ) -> Tuple[Optional[ModuleSpec], Optional[str]]:
+    ) -> tuple[Optional[ModuleSpec], Optional[str]]:
         """Return a spec for the package if it exists and is newer than the source
         code that it is derived from.
         """
@@ -383,7 +382,7 @@ def _find_maturin_project_above(path: Path) -> Optional[Path]:
 
 def _load_dist_info(
     path: Path, package_name: str, *, require_project_target: bool = True
-) -> Tuple[Optional[Path], bool]:
+) -> tuple[Optional[Path], bool]:
     dist_info_path = next(path.glob(f"{package_name}-*.dist-info"), None)
     if dist_info_path is None:
         return None, False
@@ -459,7 +458,7 @@ class DefaultProjectFileSearcher(ProjectFileSearcher):
     # - https://github.com/github/gitignore/blob/main/Rust.gitignore
     # - https://github.com/github/gitignore/blob/main/Python.gitignore
     # - https://github.com/jupyter/notebook/blob/main/.gitignore
-    DEFAULT_SOURCE_EXCLUDED_DIR_NAMES: ClassVar[Set[str]] = {
+    DEFAULT_SOURCE_EXCLUDED_DIR_NAMES: ClassVar[set[str]] = {
         ".cache",
         ".env",
         ".git",
@@ -483,10 +482,10 @@ class DefaultProjectFileSearcher(ProjectFileSearcher):
         "target",
         "venv",
     }
-    DEFAULT_SOURCE_EXCLUDED_DIR_MARKERS: ClassVar[Set[str]] = {
+    DEFAULT_SOURCE_EXCLUDED_DIR_MARKERS: ClassVar[set[str]] = {
         "CACHEDIR.TAG",  # https://bford.info/cachedir/
     }
-    DEFAULT_SOURCE_EXCLUDED_FILE_EXTENSIONS: ClassVar[Set[str]] = {
+    DEFAULT_SOURCE_EXCLUDED_FILE_EXTENSIONS: ClassVar[set[str]] = {
         ".so",
         ".pyc",
     }
@@ -494,9 +493,9 @@ class DefaultProjectFileSearcher(ProjectFileSearcher):
     def __init__(
         self,
         *,
-        source_excluded_dir_names: Optional[Set[str]] = None,
-        source_excluded_dir_markers: Optional[Set[str]] = None,
-        source_excluded_file_extensions: Optional[Set[str]] = None,
+        source_excluded_dir_names: Optional[set[str]] = None,
+        source_excluded_dir_markers: Optional[set[str]] = None,
+        source_excluded_file_extensions: Optional[set[str]] = None,
     ) -> None:
         """
         Args:
@@ -527,7 +526,7 @@ class DefaultProjectFileSearcher(ProjectFileSearcher):
     def get_source_paths(
         self,
         project_dir: Path,
-        all_path_dependencies: List[Path],
+        all_path_dependencies: list[Path],
         installed_package_root: Path,
     ) -> Iterator[Path]:
         excluded_dirs = set()
@@ -559,10 +558,10 @@ class DefaultProjectFileSearcher(ProjectFileSearcher):
     def get_files_in_dir(
         self,
         root_path: Path,
-        ignore_dirs: Set[Path],
-        excluded_dir_names: Set[str],
-        excluded_dir_markers: Set[str],
-        excluded_file_extensions: Set[str],
+        ignore_dirs: set[Path],
+        excluded_dir_names: set[str],
+        excluded_dir_markers: set[str],
+        excluded_file_extensions: set[str],
     ) -> Iterator[Path]:
         if root_path.name in excluded_dir_names:
             return

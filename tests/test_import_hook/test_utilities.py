@@ -5,7 +5,7 @@ import re
 import subprocess
 import time
 from pathlib import Path
-from typing import List, cast
+from typing import cast
 
 import pytest
 from maturin_import_hook._building import BuildCache, BuildStatus, Freshness, get_installation_freshness
@@ -277,7 +277,7 @@ def test_set_strictly_ordered_mtimes(tmp_path: Path) -> None:
     assert a.stat().st_mtime < c.stat().st_mtime < b.stat().st_mtime < d.stat().st_mtime
 
 
-def _set_strictly_ordered_mtimes(paths: List[Path]) -> None:
+def _set_strictly_ordered_mtimes(paths: list[Path]) -> None:
     atime, mtime = get_file_times(paths[0])
     for i, p in enumerate(reversed(paths)):
         set_file_times(p, (atime, mtime - i))
@@ -426,7 +426,7 @@ def _mock_directory_as_unreadable(dir_path: Path, monkeypatch: pytest.MonkeyPatc
     original_stat = Path.stat
 
     def patched_stat(self: Path) -> object:
-        if _is_relative_to(self, dir_path):
+        if Path.is_relative_to(self, dir_path):
             e = PermissionError(13, "Permission denied")
             e.filename = str(self)
             raise e
@@ -438,16 +438,6 @@ def _mock_directory_as_unreadable(dir_path: Path, monkeypatch: pytest.MonkeyPatc
         (dir_path / "abc").stat()
     assert e_info.value.errno == 13
     assert e_info.value.filename == str(dir_path / "abc")
-
-
-def _is_relative_to(a: Path, b: Path) -> bool:
-    # TODO(matt): when 3.9 is the minimum supported python version, use Path.is_relative_to
-    try:
-        a.relative_to(b)
-    except ValueError:
-        return False
-    else:
-        return True
 
 
 def _file_not_found_message() -> str:

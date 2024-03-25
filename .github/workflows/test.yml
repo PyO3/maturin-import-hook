@@ -10,15 +10,14 @@ on:
         options:
         - all
         - ubuntu-latest
-        - macos-13  # TODO(matt): switch to 14 once this is fixed: https://github.com/actions/setup-python/issues/825
+        - macos-14
         - windows-latest
       python_version:
         type: choice
         description: Python version to test with
-        default: '3.11'
+        default: '3.12'
         options:
         - 'all'
-        - '3.8'
         - '3.9'
         - '3.10'
         - '3.11'
@@ -40,14 +39,29 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  checks: write
+
 jobs:
   generate-matrix:
     name: Generate Matrix
     runs-on: ubuntu-latest
     outputs:
-      os: ${{ steps.generate-matrix.outputs.os }}
-      python-version: ${{ steps.generate-matrix.outputs.python-version }}
+      platform: ${{ steps.generate-matrix.outputs.platform }}
       fail-fast: ${{ steps.generate-matrix.outputs.fail-fast }}
+    env:
+      OS_MATRIX: |
+        - ubuntu-latest
+        - macos-14
+        - windows-latest
+      PYTHON_VERSION: |
+        - '3.9'
+        - '3.10'
+        - '3.11'
+        - '3.12'
+        - 'pypy3.9'
+        - 'pypy3.10'
     steps:
       - uses: actions/setup-node@v4
         with:
@@ -58,51 +72,74 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const yaml = require('js-yaml')
-            const OS = yaml.load(process.env.OS_MATRIX)
-            const PYTHON_VERSIONS = yaml.load(process.env.PYTHON_VERSION)
+            const yaml = require("js-yaml");
 
+            const ALL_OS = yaml.load(process.env.OS_MATRIX);
+            const ALL_PYTHON_VERSIONS = yaml.load(process.env.PYTHON_VERSION);
+
+            let platforms = [];
+            let fail_fast = false;
+
+            let all_platforms = [];
+            ALL_OS.forEach(os => {
+              ALL_PYTHON_VERSIONS.forEach(python_version => {
+                if (os === "macos-14") {
+                  if (python_version.startsWith("pypy")) {
+                    return;  // PyPy is only built for x64
+                  } else if (parseInt(python_version.slice(2)) < 11) {
+                    return;  // macOS ARM runners only have Python 3.11+
+                  }
+                }
+                all_platforms.push({
+                  "os": os,
+                  "python-version": python_version
+                })
+              })
+            });
+
+            core.info(`job triggered by: ${context.eventName}`);
             if (context.eventName == 'workflow_dispatch') {
-              const input_os = "${{ github.event.inputs.os }}";
-              const input_python_version = "${{ github.event.inputs.python_version }}";
-              core.setOutput('os', input_os == "all" ? OS : [input_os]);
-              core.setOutput('python-version', input_python_version == "all" ? PYTHON_VERSIONS : [input_python_version]);
-              core.setOutput('fail-fast', "${{ github.event.inputs.fail_fast }}");
+              const INPUT_OS = "${{ github.event.inputs.os }}";
+              const INPUT_PYTHON_VERSION = "${{ github.event.inputs.python_version }}";
+              const INPUT_FAIL_FAST = "${{ github.event.inputs.fail_fast }}";
+
+              platforms = all_platforms.filter(platform => (
+                  (INPUT_OS == "all" || INPUT_OS.includes(platform.os))
+                  && (INPUT_PYTHON_VERSION == "all" || INPUT_PYTHON_VERSION.includes(platform['python-version']))
+              ));
+              fail_fast = INPUT_FAIL_FAST;
 
             } else if (context.eventName == 'merge_group') {
-              core.setOutput('os', OS)
-              core.setOutput('python-version', PYTHON_VERSIONS)
-              core.setOutput('fail-fast', 'false')
+              platforms = all_platforms;
+              fail_fast = false;
 
             } else if (context.eventName == 'pull_request') {
               const { data: { labels: labels } } = await github.rest.pulls.get({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 pull_number: context.payload.pull_request.number
-              })
-              const labelNames = labels.map(label => label.name)
-              if (labelNames.includes('CI-no-fail-fast')) {
-                core.setOutput('fail-fast', 'false')
-              }
-              // Only run latest CPython and PyPy tests on pull requests
-              const firstPyPy = PYTHON_VERSIONS.findIndex(version => version.startsWith('pypy'))
-              const pythonVersions = [PYTHON_VERSIONS[firstPyPy - 1], PYTHON_VERSIONS[PYTHON_VERSIONS.length - 1]]
-              core.setOutput('python-version', pythonVersions)
-            }
-    env:
-      OS_MATRIX: |
-        - ubuntu-latest
-        - macos-13
-        - windows-latest
-      PYTHON_VERSION: |
-        - '3.8'
-        - '3.9'
-        - '3.10'
-        - '3.11'
-        - '3.12'
-        - 'pypy3.9'
-        - 'pypy3.10'
+              });
+              const label_names = labels.map(label => label.name);
 
+              if (label_names.includes("CI-test-all")) {
+                platforms = all_platforms;
+              } else {
+                // assumes versions are listed in ascending order
+                const latest_pypy_index = ALL_PYTHON_VERSIONS.findLastIndex(version => version.startsWith('pypy'));
+                const latest_cpython_index = ALL_PYTHON_VERSIONS.findLastIndex(version => /^\d/.test(version));
+                const python_versions = [ALL_PYTHON_VERSIONS[latest_pypy_index], ALL_PYTHON_VERSIONS[latest_cpython_index]];
+                platforms = all_platforms.filter(platform => (
+                  platform.os == "ubuntu-latest" && python_versions.includes(platform["python-version"])
+                ));
+              }
+              fail_fast = !label_names.includes("CI-no-fail-fast");
+            }
+
+            core.info(`platforms = ${JSON.stringify(platforms)}`);
+            core.setOutput("platform", platforms);
+
+            core.info(`fail fast = ${fail_fast}`);
+            core.setOutput("fail-fast", fail_fast);
 
   test:
     name: Test
@@ -110,25 +147,23 @@ jobs:
     strategy:
       fail-fast: ${{ needs.generate-matrix.outputs.fail-fast != 'false' }}
       matrix:
-        os: ${{ fromJson(needs.generate-matrix.outputs.os) }}
-        python-version: ${{ fromJson(needs.generate-matrix.outputs.python-version) }}
-    runs-on: ${{ matrix.os }}
+        platform: ${{ fromJson(needs.generate-matrix.outputs.platform) }}
+    runs-on: ${{ matrix.platform.os }}
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
-          architecture: "x64"
+          python-version: ${{ matrix.platform.python-version }}
           cache: "pip"
       - uses: dtolnay/rust-toolchain@stable
         id: rustup
       - name: Install aarch64-apple-darwin Rust target
-        if: startsWith(matrix.os, 'macos')
+        if: startsWith(matrix.platform.os, 'macos')
         run: rustup target add aarch64-apple-darwin
       - name: Setup Xcode env
-        if: startsWith(matrix.os, 'macos')
+        if: startsWith(matrix.platform.os, 'macos')
         shell: bash
         run: |
           set -ex
@@ -139,7 +174,7 @@ jobs:
           echo "SDKROOT=$(xcrun --sdk macosx --show-sdk-path)" >> "${GITHUB_ENV}"
       # To save disk space
       - name: Disable debuginfo on Windows
-        if: startsWith(matrix.os, 'windows')
+        if: startsWith(matrix.platform.os, 'windows')
         run: echo "RUSTFLAGS="-C debuginfo=0"" >> $GITHUB_ENV
       - name: Install test requirements
         run: cd tests && pip install --disable-pip-version-check -r requirements.txt
@@ -153,21 +188,23 @@ jobs:
 
           python tests/runner.py \
             --workspace ./test_workspace \
-            --name "${{ matrix.os }}_${{ matrix.python-version }}" \
+            --name "${{ matrix.platform.os }}_${{ matrix.platform.python-version }}" \
             ${EXTRA_ARGS} \
             "${{ github.event.inputs.test_specification || 'tests/test_import_hook' }}"
       - name: Upload HTML test report
         uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: ${{ matrix.os }}-${{ matrix.python-version }}-test-report.html
+          name: ${{ matrix.platform.os }}-${{ matrix.platform.python-version }}-test-report.html
           path: './test_workspace/report.html'
       - name: Publish Test Report
         uses: mikepenz/action-junit-report@v4
-        if: success() || failure()
+        if: always()
         with:
           report_paths: './test_workspace/reports/*.xml'
-          test_files_prefix: "${{ matrix.os }}_${{ matrix.python-version }}"
+          test_files_prefix: "${{ matrix.platform.os }}_${{ matrix.platform.python-version }}"
+          check_annotations: false
+          job_summary: true
 
 
   conclusion:

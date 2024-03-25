@@ -5,7 +5,6 @@ import shutil
 import sys
 from pathlib import Path
 from textwrap import dedent
-from typing import Tuple
 
 import pytest
 
@@ -605,7 +604,7 @@ class TestReload:
 class TestLogging:
     """test the desired messages are visible to the user in the default logging configuration."""
 
-    def _create_clean_package(self, package_path: Path, *, reload_helper: bool = False) -> Tuple[Path, Path]:
+    def _create_clean_package(self, package_path: Path, *, reload_helper: bool = False) -> tuple[Path, Path]:
         package_path.mkdir()
         rs_path = Path(shutil.copy(helpers_dir / "my_script_1.rs", package_path / "my_script.rs"))
         if reload_helper:
@@ -633,7 +632,7 @@ class TestLogging:
         assert output == (
             'building "my_script"\n'
             "caught MaturinError('unsupported maturin version: (0, 1, 2). "
-            "Import hook requires >=(1, 4, 0),<(2, 0, 0)')\n"
+            "Import hook requires >=(1, 5, 0),<(2, 0, 0)')\n"
         )
 
     def test_default_rebuild(self, workspace: Path) -> None:

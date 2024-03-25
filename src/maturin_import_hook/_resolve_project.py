@@ -1,7 +1,7 @@
 import itertools
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar
+from typing import Any, Optional, TypeVar
 
 from maturin_import_hook._logging import logger
 
@@ -15,7 +15,7 @@ _T = TypeVar("_T")
 
 
 class _TomlFile:
-    def __init__(self, path: Path, data: Dict[Any, Any]) -> None:
+    def __init__(self, path: Path, data: dict[Any, Any]) -> None:
         self.path = path
         self.data = data
 
@@ -25,11 +25,11 @@ class _TomlFile:
             data = tomllib.load(f)
         return _TomlFile(path, data)
 
-    def get_value_or_default(self, keys: List[str], required_type: Type[_T], default: _T) -> _T:
+    def get_value_or_default(self, keys: list[str], required_type: type[_T], default: _T) -> _T:
         value = self.get_value(keys, required_type)
         return default if value is None else value
 
-    def get_value(self, keys: List[str], required_type: Type[_T]) -> Optional[_T]:
+    def get_value(self, keys: list[str], required_type: type[_T]) -> Optional[_T]:
         assert keys
         current_data: Any = self.data
         num_keys = len(keys)
@@ -78,7 +78,7 @@ def is_maybe_maturin_project(project_dir: Path) -> bool:
 
 class ProjectResolver:
     def __init__(self) -> None:
-        self._resolved_project_cache: Dict[Path, Optional[MaturinProject]] = {}
+        self._resolved_project_cache: dict[Path, Optional[MaturinProject]] = {}
 
     def resolve(self, project_dir: Path) -> Optional["MaturinProject"]:
         if project_dir not in self._resolved_project_cache:
@@ -106,9 +106,9 @@ class MaturinProject:
     # the location that the compiled extension module is written to when installed in editable/unpacked mode
     extension_module_dir: Optional[Path]
     # path dependencies listed in the Cargo.toml of the main project
-    immediate_path_dependencies: List[Path]
+    immediate_path_dependencies: list[Path]
     # all path dependencies including transitive dependencies
-    _all_path_dependencies: Optional[List[Path]] = None
+    _all_path_dependencies: Optional[list[Path]] = None
 
     @property
     def package_name(self) -> str:
@@ -124,13 +124,13 @@ class MaturinProject:
         return self.extension_module_dir is not None
 
     @property
-    def all_path_dependencies(self) -> List[Path]:
+    def all_path_dependencies(self) -> list[Path]:
         if self._all_path_dependencies is None:
             self._all_path_dependencies = _find_all_path_dependencies(self.immediate_path_dependencies)
         return self._all_path_dependencies
 
 
-def _find_all_path_dependencies(immediate_path_dependencies: List[Path]) -> List[Path]:
+def _find_all_path_dependencies(immediate_path_dependencies: list[Path]) -> list[Path]:
     if not immediate_path_dependencies:
         return []
     all_path_dependencies = set()
@@ -194,7 +194,7 @@ def _resolve_project(project_dir: Path) -> MaturinProject:
     )
 
 
-def _resolve_rust_module(python_dir: Path, module_name: str) -> Tuple[Path, Path, str]:
+def _resolve_rust_module(python_dir: Path, module_name: str) -> tuple[Path, Path, str]:
     """This follows the same logic as project_layout.rs (ProjectLayout::determine).
 
     rust_module is the directory that the extension library gets written to when the package is
@@ -234,7 +234,7 @@ def _resolve_module_name(pyproject: _TomlFile, cargo: _TomlFile) -> Optional[str
     return cargo.get_value(["package", "name"], str)
 
 
-def _get_immediate_path_dependencies(manifest_dir_path: Path, cargo: _TomlFile) -> List[Path]:
+def _get_immediate_path_dependencies(manifest_dir_path: Path, cargo: _TomlFile) -> list[Path]:
     path_dependencies = []
     for dependency in cargo.get_value_or_default(["dependencies"], dict, {}).values():
         if isinstance(dependency, dict):

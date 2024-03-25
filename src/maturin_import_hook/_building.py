@@ -5,15 +5,15 @@ import os
 import platform
 import re
 import shutil
-import site
 import subprocess
 import sys
 import zipfile
+from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from operator import itemgetter
 from pathlib import Path
-from typing import Any, Dict, Generator, Iterable, List, Optional, Tuple
+from typing import Any, Optional
 
 import filelock
 
@@ -31,10 +31,10 @@ class BuildStatus:
 
     build_mtime: float
     source_path: Path
-    maturin_args: List[str]
+    maturin_args: list[str]
     maturin_output: str
 
-    def to_json(self) -> Dict[str, Any]:
+    def to_json(self) -> dict[str, Any]:
         return {
             "build_mtime": self.build_mtime,
             "source_path": str(self.source_path),
@@ -43,7 +43,7 @@ class BuildStatus:
         }
 
     @staticmethod
-    def from_json(json_data: Dict[Any, Any]) -> Optional["BuildStatus"]:
+    def from_json(json_data: dict[Any, Any]) -> Optional["BuildStatus"]:
         try:
             return BuildStatus(
                 build_mtime=json_data["build_mtime"],
@@ -186,35 +186,7 @@ def develop_build_project(
     return output
 
 
-# TODO(matt): remove once a maturin release can create editable installs and raise minimum supported version
-def fix_direct_url(project_dir: Path, package_name: str) -> None:
-    """Seemingly due to a bug, installing with `pip install -e` will write the correct entry into `direct_url.json` to
-    point at the project directory, but calling `maturin develop` does not currently write this value correctly.
-    """
-    logger.debug("fixing direct_url for %s", package_name)
-    for path in site.getsitepackages():
-        dist_info = next(Path(path).glob(f"{package_name}-*.dist-info"), None)
-        if dist_info is None:
-            continue
-        direct_url_path = dist_info / "direct_url.json"
-        try:
-            with direct_url_path.open() as f:
-                direct_url = json.load(f)
-        except OSError:
-            continue
-        url = project_dir.as_uri()
-        if direct_url.get("url") != url:
-            logger.debug("fixing direct_url.json for package %s", package_name)
-            logger.debug('"%s" -> "%s"', direct_url.get("url"), url)
-            direct_url = {"dir_info": {"editable": True}, "url": url}
-            try:
-                with direct_url_path.open("w") as f:
-                    json.dump(direct_url, f)
-            except OSError:
-                return
-
-
-def find_maturin(lower_version: Tuple[int, int, int], upper_version: Tuple[int, int, int]) -> Path:
+def find_maturin(lower_version: tuple[int, int, int], upper_version: tuple[int, int, int]) -> Path:
     logger.debug("searching for maturin")
     maturin_path_str = shutil.which("maturin")
     if maturin_path_str is None:
@@ -231,7 +203,7 @@ def find_maturin(lower_version: Tuple[int, int, int], upper_version: Tuple[int, 
         raise MaturinError(msg)
 
 
-def get_maturin_version(maturin_path: Path) -> Tuple[int, int, int]:
+def get_maturin_version(maturin_path: Path) -> tuple[int, int, int]:
     success, output = run_maturin(maturin_path, ["--version"])
     if not success:
         msg = f'running "{maturin_path} --version" failed'
@@ -243,7 +215,7 @@ def get_maturin_version(maturin_path: Path) -> Tuple[int, int, int]:
     return int(match.group(1)), int(match.group(2)), int(match.group(3))
 
 
-def run_maturin(maturin_path: Path, args: List[str]) -> Tuple[bool, str]:
+def run_maturin(maturin_path: Path, args: list[str]) -> tuple[bool, str]:
     command = [str(maturin_path), *args]
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug("running command: %s", subprocess.list2cmdline(command))

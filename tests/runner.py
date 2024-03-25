@@ -208,55 +208,6 @@ def _notify(message: str) -> None:
         pass
 
 
-# TODO(matt): remove when 3.9 is the minimum supported version
-if sys.version_info < (3, 9):
-    from typing import Any
-    # ruff: noqa: ANN401
-
-    class _BooleanOptionalAction(argparse.Action):
-        """a copy of argparse.BooleanOptionAction. This class is only available in python 3.9+"""
-
-        def __init__(
-            self,
-            option_strings: Any,
-            dest: Any,
-            default: Any = None,
-            type: Any = None,  # noqa: A002
-            choices: Any = None,
-            required: Any = False,
-            help: Any = None,  # noqa: A002
-            metavar: Any = None,
-        ) -> None:
-            _option_strings = []
-            for option_string in option_strings:
-                _option_strings.append(option_string)
-
-                if option_string.startswith("--"):
-                    option_string = "--no-" + option_string[2:]  # noqa: PLW2901
-                    _option_strings.append(option_string)
-
-            super().__init__(
-                option_strings=_option_strings,
-                dest=dest,
-                nargs=0,
-                default=default,
-                type=type,
-                choices=choices,
-                required=required,
-                help=help,
-                metavar=metavar,
-            )
-
-        def __call__(self, parser: Any, namespace: Any, values: Any, option_string: Any = None) -> None:
-            if option_string in self.option_strings:
-                setattr(namespace, self.dest, not option_string.startswith("--no-"))
-
-        def format_usage(self) -> str:
-            return " | ".join(self.option_strings)
-
-    argparse.BooleanOptionalAction = _BooleanOptionalAction  # type: ignore[attr-defined]
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description="run the import hook tests in clean virtual environments")
     parser.add_argument(
@@ -292,13 +243,13 @@ def main() -> None:
 
     parser.add_argument(
         "--html-report",
-        action=argparse.BooleanOptionalAction,  # type: ignore[attr-defined]
+        action=argparse.BooleanOptionalAction,
         default=True,
         help="whether to create a html report from the junit test report",
     )
     parser.add_argument(
         "--notify",
-        action=argparse.BooleanOptionalAction,  # type: ignore[attr-defined]
+        action=argparse.BooleanOptionalAction,
         default=True,
         help="send a notification when finished",
     )
