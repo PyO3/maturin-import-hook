@@ -34,6 +34,8 @@ To update maturin:
 - update the submodule to the maturin commit you want to update to
 - re-run the `package_resolver` to update `resolved.json` (see `package_resolver/README.md` for instructions)
 - update `requirements.txt` to match the packages and versions used by the maturin ci (`.github/workflows.test.yml`)
+    - check the `uniffi` package version listed in the `Cargo.toml` of any of the `uniffi-*`
+      test crates and update `uniffi-bindgen` in `requirements.txt` to match.
 - check that no crates have been added to `test-crates` that should be excluded from the import hook tests.
   If so, add them to `IGNORED_TEST_CRATES` in `common.py`
 - update the version check in the import hook to ensure it allows using the new version

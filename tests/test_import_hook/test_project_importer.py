@@ -1395,7 +1395,7 @@ def _install_editable(project_dir: Path) -> None:
     assert maturin_path is not None
     env = os.environ.copy()
     env["VIRTUAL_ENV"] = sys.exec_prefix
-    subprocess.check_call([maturin_path, "develop"], cwd=project_dir, env=env)
+    subprocess.check_call([maturin_path, "develop", "--uv"], cwd=project_dir, env=env)
 
 
 def _install_non_editable(project_dir: Path) -> None:

@@ -11,7 +11,7 @@ fn get_num() -> usize {
 }
 
 #[pymodule]
-fn my_project(_py: Python, m: &PyModule) -> PyResult<()> {
+fn my_project(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_wrapped(wrap_pyfunction!(get_num))?;
     Ok(())
 }
