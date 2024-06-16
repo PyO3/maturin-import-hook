@@ -83,16 +83,17 @@ def _action_site_info(format_name: str) -> None:
 
     _print_info(
         {
-            "has_sitecustomize": sitecustomize_path.exists(),
+            "sitecustomize_exists": sitecustomize_path.exists(),
+            "sitecustomize_path": str(sitecustomize_path),
             "import_hook_installed": has_automatic_installation(sitecustomize_path),
         },
         format_name,
     )
 
 
-def _action_site_install() -> None:
+def _action_site_install(preset_name: str, force: bool) -> None:
     sitecustomize_path = get_sitecustomize_path()
-    insert_automatic_installation(sitecustomize_path)
+    insert_automatic_installation(sitecustomize_path, preset_name, force)
 
 
 def _action_site_uninstall() -> None:
@@ -157,8 +158,20 @@ def _main() -> None:
     site_info.add_argument(
         "-f", "--format", choices=["text", "json"], default="text", help="the format to output the data in"
     )
-    site_sub_actions.add_parser(
+    install = site_sub_actions.add_parser(
         "install", help="install the import hook into site-packages/sitecustomize.py so that it starts automatically"
+    )
+    install.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="whether to overwrite any existing managed import hook installation in sitecustomize.py",
+    )
+    install.add_argument(
+        "--preset",
+        default="debug",
+        choices=["debug", "release"],
+        help="the settings preset for the import hook to use when building packages. Defaults to 'debug'.",
     )
     site_sub_actions.add_parser("uninstall", help="uninstall the import hook from site-packages/sitecustomize.py")
 
@@ -179,7 +192,7 @@ def _main() -> None:
         if args.sub_action == "info":
             _action_site_info(args.format)
         elif args.sub_action == "install":
-            _action_site_install()
+            _action_site_install(args.preset, args.force)
         elif args.sub_action == "uninstall":
             _action_site_uninstall()
         else:

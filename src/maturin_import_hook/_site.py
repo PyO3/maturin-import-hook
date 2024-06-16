@@ -1,16 +1,27 @@
 import site
 from pathlib import Path
+from textwrap import dedent
 
 from maturin_import_hook._logging import logger
 
 MANAGED_INSTALL_START = "# <maturin_import_hook>"
 MANAGED_INSTALL_END = "# </maturin_import_hook>\n"
-MANAGED_INSTALLATION = """
-# this section of code installs the maturin import hook into every interpreter.
+MANAGED_INSTALL_COMMENT = """
+# the following commands install the maturin import hook during startup.
 # see: `python -m maturin_import_hook site`
-import maturin_import_hook
-maturin_import_hook.install()
 """
+
+MANAGED_INSTALLATION_PRESETS = {
+    "debug": dedent("""\
+        import maturin_import_hook
+        maturin_import_hook.install()
+    """),
+    "release": dedent("""\
+        import maturin_import_hook
+        from maturin_import_hook.settings import MaturinSettings
+        maturin_import_hook.install(MaturinSettings(release=True))
+    """),
+}
 
 
 def get_sitecustomize_path() -> Path:
@@ -56,16 +67,29 @@ def remove_automatic_installation(sitecustomize: Path) -> None:
         sitecustomize.unlink(missing_ok=True)
 
 
-def insert_automatic_installation(sitecustomize: Path) -> None:
+def insert_automatic_installation(sitecustomize: Path, preset_name: str, force: bool) -> None:
+    if preset_name not in MANAGED_INSTALLATION_PRESETS:
+        msg = f"Unknown managed installation preset name: '{preset_name}'"
+        raise ValueError(msg)
+
     logger.info(f"installing automatic activation into '{sitecustomize}'")
     if has_automatic_installation(sitecustomize):
-        logger.info("already installed")
-        return
+        if force:
+            logger.info("already installed, but force=True. Overwriting...")
+            remove_automatic_installation(sitecustomize)
+        else:
+            logger.info("already installed. Aborting install")
+            return
 
     parts = []
     if sitecustomize.exists():
         parts.append(sitecustomize.read_text())
         parts.append("\n")
-    parts.extend([MANAGED_INSTALL_START, MANAGED_INSTALLATION, MANAGED_INSTALL_END])
+    parts.extend([
+        MANAGED_INSTALL_START,
+        MANAGED_INSTALL_COMMENT,
+        MANAGED_INSTALLATION_PRESETS[preset_name],
+        MANAGED_INSTALL_END,
+    ])
     code = "".join(parts)
     sitecustomize.write_text(code)
