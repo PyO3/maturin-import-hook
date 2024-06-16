@@ -8,6 +8,8 @@ components take effect automatically like changes to python components do.
 The import hook also provides conveniences such as
 [importlib.reload()](https://docs.python.org/3/library/importlib.html#importlib.reload) support for maturin projects.
 
+Documentation can be found at [maturin.rs](https://www.maturin.rs/import_hook).
+
 ## Usage
 
 After installing [maturin](https://www.maturin.rs/installation), install the import hook into a python virtual
