@@ -100,16 +100,33 @@ def _run_test_in_environment(
         sys.exit(proc.returncode)
 
 
+def _pip_install_command(interpreter_path: Path) -> list[str]:
+    if shutil.which("uv") is not None:
+        log.info("using uv to install packages")
+        return [
+            "uv",
+            "pip",
+            "install",
+            "--python",
+            str(interpreter_path),
+        ]
+    else:
+        log.info("using pip to install packages")
+        return [
+            str(interpreter_path),
+            "-m",
+            "pip",
+            "install",
+            "--disable-pip-version-check",
+        ]
+
+
 def _create_test_venv(python: Path, venv_dir: Path) -> VirtualEnv:
     venv = VirtualEnv.new(venv_dir, python)
     log.info("installing test requirements into virtualenv")
     proc = subprocess.run(
         [
-            str(venv.interpreter_path),
-            "-m",
-            "pip",
-            "install",
-            "--disable-pip-version-check",
+            *_pip_install_command(venv.interpreter_path),
             "-r",
             "requirements.txt",
         ],
@@ -120,11 +137,23 @@ def _create_test_venv(python: Path, venv_dir: Path) -> VirtualEnv:
     if proc.returncode != 0:
         log.error(proc.stdout.decode())
         log.error(proc.stderr.decode())
-        msg = "pip install failed"
+        msg = "package installation failed"
         raise RuntimeError(msg)
     log.debug("%s", proc.stdout.decode())
     log.info("test environment ready")
     return venv
+
+
+def _create_virtual_env_command(interpreter_path: Path, venv_path: Path) -> list[str]:
+    if shutil.which("uv") is not None:
+        log.info("using uv to create virtual environments")
+        return ["uv", "venv", "--seed", "--python", str(interpreter_path), str(venv_path)]
+    elif shutil.which("virtualenv") is not None:
+        log.info("using virtualenv to create virtual environments")
+        return ["virtualenv", "--python", str(interpreter_path), str(venv_path)]
+    else:
+        log.info("using venv to create virtual environments")
+        return [str(interpreter_path), "-m", "venv", str(venv_path)]
 
 
 class VirtualEnv:
@@ -140,7 +169,7 @@ class VirtualEnv:
         if not interpreter_path.exists():
             raise FileNotFoundError(interpreter_path)
         log.info("creating test virtualenv at '%s' from '%s'", root, interpreter_path)
-        cmd = ["virtualenv", "--python", str(interpreter_path), str(root)]
+        cmd = _create_virtual_env_command(interpreter_path, root)
         proc = subprocess.run(cmd, capture_output=True, check=True)
         log.debug("%s", proc.stdout.decode())
         assert root.is_dir()
