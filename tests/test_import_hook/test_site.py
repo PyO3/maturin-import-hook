@@ -38,8 +38,12 @@ def test_automatic_site_installation(tmp_path: Path) -> None:
     # <maturin_import_hook>
     # the following commands install the maturin import hook during startup.
     # see: `python -m maturin_import_hook site`
-    import maturin_import_hook
-    maturin_import_hook.install()
+    try:
+        import maturin_import_hook
+    except ImportError:
+        pass
+    else:
+        maturin_import_hook.install()
     # </maturin_import_hook>
     """)
 
@@ -99,9 +103,13 @@ def test_automatic_site_installation_force_overwrite(tmp_path: Path) -> None:
     # <maturin_import_hook>
     # the following commands install the maturin import hook during startup.
     # see: `python -m maturin_import_hook site`
-    import maturin_import_hook
-    from maturin_import_hook.settings import MaturinSettings
-    maturin_import_hook.install(MaturinSettings(release=True))
+    try:
+        import maturin_import_hook
+        from maturin_import_hook.settings import MaturinSettings
+    except ImportError:
+        pass
+    else:
+        maturin_import_hook.install(MaturinSettings(release=True))
     # </maturin_import_hook>
     """)
 
@@ -124,8 +132,12 @@ def test_automatic_site_installation_empty(tmp_path: Path) -> None:
     # <maturin_import_hook>
     # the following commands install the maturin import hook during startup.
     # see: `python -m maturin_import_hook site`
-    import maturin_import_hook
-    maturin_import_hook.install()
+    try:
+        import maturin_import_hook
+    except ImportError:
+        pass
+    else:
+        maturin_import_hook.install()
     # </maturin_import_hook>
     """)
 

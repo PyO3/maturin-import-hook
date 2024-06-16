@@ -3,12 +3,14 @@ import importlib.metadata
 import json
 import platform
 import shutil
+import site
 import subprocess
 from pathlib import Path
 
 from maturin_import_hook._building import get_default_build_dir
 from maturin_import_hook._site import (
     get_sitecustomize_path,
+    get_usercustomize_path,
     has_automatic_installation,
     insert_automatic_installation,
     remove_automatic_installation,
@@ -80,25 +82,30 @@ def _action_cache_clear(interactive: bool) -> None:
 
 def _action_site_info(format_name: str) -> None:
     sitecustomize_path = get_sitecustomize_path()
+    usercustomize_path = get_usercustomize_path()
 
     _print_info(
         {
-            "sitecustomize_exists": sitecustomize_path.exists(),
             "sitecustomize_path": str(sitecustomize_path),
-            "import_hook_installed": has_automatic_installation(sitecustomize_path),
+            "sitecustomize_exists": sitecustomize_path.exists(),
+            "sitecustomize_import_hook_installed": has_automatic_installation(sitecustomize_path),
+            "user_site_enabled": str(site.ENABLE_USER_SITE),
+            "usercustomize_path": str(usercustomize_path),
+            "usercustomize_exists": usercustomize_path.exists(),
+            "usercustomize_import_hook_installed": has_automatic_installation(usercustomize_path),
         },
         format_name,
     )
 
 
-def _action_site_install(preset_name: str, force: bool) -> None:
-    sitecustomize_path = get_sitecustomize_path()
-    insert_automatic_installation(sitecustomize_path, preset_name, force)
+def _action_site_install(*, user: bool, preset_name: str, force: bool) -> None:
+    module_path = get_usercustomize_path() if user else get_sitecustomize_path()
+    insert_automatic_installation(module_path, preset_name, force)
 
 
-def _action_site_uninstall() -> None:
-    sitecustomize_path = get_sitecustomize_path()
-    remove_automatic_installation(sitecustomize_path)
+def _action_site_uninstall(*, user: bool) -> None:
+    module_path = get_usercustomize_path() if user else get_sitecustomize_path()
+    remove_automatic_installation(module_path)
 
 
 def _ask_yes_no(question: str) -> bool:
@@ -149,23 +156,31 @@ def _main() -> None:
 
     site_action = subparsers.add_parser(
         "site",
-        help="manage installation of the import hook into site-packages/sitecustomize.py (so it starts automatically)",
+        help=(
+            "manage installation of the import hook into site-packages/sitecustomize.py "
+            "or usercustomize.py (so it starts automatically)"
+        ),
     )
     site_sub_actions = site_action.add_subparsers(dest="sub_action")
     site_info = site_sub_actions.add_parser(
-        "info", help="information about the current status of installation into sitecustomize"
+        "info", help="information about the current status of installation into sitecustomize/usercustomize"
     )
     site_info.add_argument(
         "-f", "--format", choices=["text", "json"], default="text", help="the format to output the data in"
     )
+
     install = site_sub_actions.add_parser(
-        "install", help="install the import hook into site-packages/sitecustomize.py so that it starts automatically"
+        "install",
+        help=(
+            "install the import hook into site-packages/sitecustomize.py "
+            "or usercustomize.py so that it starts automatically"
+        ),
     )
     install.add_argument(
         "-f",
         "--force",
         action="store_true",
-        help="whether to overwrite any existing managed import hook installation in sitecustomize.py",
+        help="whether to overwrite any existing managed import hook installation",
     )
     install.add_argument(
         "--preset",
@@ -173,7 +188,24 @@ def _main() -> None:
         choices=["debug", "release"],
         help="the settings preset for the import hook to use when building packages. Defaults to 'debug'.",
     )
-    site_sub_actions.add_parser("uninstall", help="uninstall the import hook from site-packages/sitecustomize.py")
+    install.add_argument(
+        "--user",
+        action="store_true",
+        help="whether to install into usercustomize.py instead of sitecustomize.py. "
+        "Note that usercustomize.py is shared between virtualenvs of the same interpreter version and is not loaded "
+        "unless the virtualenv is created with the `--system-site-packages` argument. Use `site info` to check "
+        "whether usercustomize.py is loaded the current interpreter.",
+    )
+
+    uninstall = site_sub_actions.add_parser(
+        "uninstall",
+        help="uninstall the import hook from site-packages/sitecustomize.py or site-packages/usercustomize.py",
+    )
+    uninstall.add_argument(
+        "--user",
+        action="store_true",
+        help="whether to uninstall from usercustomize.py instead of sitecustomize.py",
+    )
 
     args = parser.parse_args()
 
@@ -192,9 +224,9 @@ def _main() -> None:
         if args.sub_action == "info":
             _action_site_info(args.format)
         elif args.sub_action == "install":
-            _action_site_install(args.preset, args.force)
+            _action_site_install(user=args.user, preset_name=args.preset, force=args.force)
         elif args.sub_action == "uninstall":
-            _action_site_uninstall()
+            _action_site_uninstall(user=args.user)
         else:
             site_action.print_help()
     else:
