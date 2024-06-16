@@ -10,7 +10,8 @@ The import hook also provides conveniences such as
 
 ## Usage
 
-After installing `maturin`, install the import hook into a python virtual environment with:
+After installing [maturin](https://www.maturin.rs/installation), install the import hook into a python virtual
+environment with:
 
 ```shell
 pip install maturin_import_hook
@@ -35,7 +36,7 @@ maturin_import_hook.install()
 
 # when a rust package that is installed in editable mode is imported,
 # that package will be automatically recompiled if necessary.
-import pyo3_pure
+import example_maturin_package
 
 # when a .rs file is imported a project will be created for it in the
 # maturin build cache and the resulting library will be loaded.

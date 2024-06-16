@@ -23,12 +23,12 @@ def _action_version(format_name: str) -> None:
 
     try:
         maturin_version = subprocess.check_output(["maturin", "--version"]).decode().strip()
-    except subprocess.CalledProcessError:
+    except (subprocess.CalledProcessError, FileNotFoundError):
         maturin_version = "?"
 
     try:
         rustc_version = subprocess.check_output(["rustc", "--version"]).decode().strip()
-    except subprocess.CalledProcessError:
+    except (subprocess.CalledProcessError, FileNotFoundError):
         rustc_version = "?"
 
     try:
