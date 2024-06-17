@@ -1,6 +1,6 @@
 [project]
 name = "maturin-import-hook"
-description = "import hook to load rust projects built with maturin"
+description = "Import hook to load rust projects built with maturin"
 authors = [
     {name = "Matthew Broadway", email = "mattdbway@gmail.com"}
 ]

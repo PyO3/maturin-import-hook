@@ -10,6 +10,7 @@ import sys
 from collections.abc import Iterator
 from pathlib import Path
 from textwrap import dedent
+from typing import Optional
 
 import pytest
 from maturin_import_hook.project_importer import DefaultProjectFileSearcher, _load_dist_info
@@ -1342,30 +1343,47 @@ def _rebuilt_message(project_name: str) -> str:
     return f'rebuilt and loaded package "{with_underscores(project_name)}"'
 
 
+_UV_AVAILABLE: Optional[bool] = None
+
+
+def uv_available() -> bool:
+    """whether the `uv` command is installed"""
+    global _UV_AVAILABLE
+    if _UV_AVAILABLE is None:
+        _UV_AVAILABLE = shutil.which("uv") is not None
+    return _UV_AVAILABLE
+
+
 def _uninstall(*project_names: str) -> None:
     log.info("uninstalling %s", sorted(project_names))
-    subprocess.check_call([
-        sys.executable,
-        "-m",
-        "pip",
-        "uninstall",
-        "--disable-pip-version-check",
-        "-y",
-        *project_names,
-    ])
+    if uv_available():
+        cmd = ["uv", "pip", "uninstall", "--python", str(sys.executable), *project_names]
+    else:
+        cmd = [
+            sys.executable,
+            "-m",
+            "pip",
+            "uninstall",
+            "--disable-pip-version-check",
+            "-y",
+            *project_names,
+        ]
+    subprocess.check_call(cmd)
 
 
 def _get_installed_package_names() -> set[str]:
-    packages = json.loads(
-        subprocess.check_output([
+    if uv_available():
+        cmd = ["uv", "pip", "list", "--python", sys.executable, "--format", "json"]
+    else:
+        cmd = [
             sys.executable,
             "-m",
             "pip",
             "--disable-pip-version-check",
             "list",
             "--format=json",
-        ]).decode()
-    )
+        ]
+    packages = json.loads(subprocess.check_output(cmd).decode())
     return {package["name"] for package in packages}
 
 
@@ -1382,7 +1400,11 @@ def _install_editable(project_dir: Path) -> None:
 
 def _install_non_editable(project_dir: Path) -> None:
     log.info("installing %s in non-editable mode", project_dir.name)
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "--disable-pip-version-check", str(project_dir)])
+    if uv_available():
+        cmd = ["uv", "pip", "install", "--python", sys.executable, str(project_dir)]
+    else:
+        cmd = [sys.executable, "-m", "pip", "install", "--disable-pip-version-check", str(project_dir)]
+    subprocess.check_call(cmd)
 
 
 def _is_installed_as_pth(project_name: str) -> bool:
@@ -1415,14 +1437,20 @@ def _is_editable_installed_correctly(project_name: str, project_dir: Path, is_mi
         installed_editable_with_direct_url,
     )
 
+    if uv_available():
+        # TODO(matt): use uv once the --files option is supported https://github.com/astral-sh/uv/issues/2526
+        cmd = [sys.executable, "-m", "pip", "show", "--disable-pip-version-check", "-f", project_name]
+    else:
+        cmd = [sys.executable, "-m", "pip", "show", "--disable-pip-version-check", "-f", project_name]
+
     proc = subprocess.run(
-        [sys.executable, "-m", "pip", "show", "--disable-pip-version-check", "-f", project_name],
+        cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         check=False,
     )
     output = "None" if proc.stdout is None else proc.stdout.decode()
-    log.info("pip output (returned %s):\n%s", proc.returncode, output)
+    log.info("command output (returned %s):\n%s", proc.returncode, output)
     return installed_editable_with_direct_url and (installed_as_pth == is_mixed)
 
 

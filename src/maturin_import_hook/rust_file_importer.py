@@ -420,3 +420,7 @@ def uninstall() -> None:
         with contextlib.suppress(ValueError):
             sys.meta_path.remove(IMPORTER)
         IMPORTER = None
+
+
+def is_installed() -> bool:
+    return IMPORTER is not None and IMPORTER in sys.meta_path
