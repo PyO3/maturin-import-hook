@@ -1,5 +1,5 @@
 {
-  "commit": "7d711f0c4a7c052608dc2e16d5c6721b9666d076",
+  "commit": "894231c644c2d7a9a31349c86b3f3c431b74d615",
   "crates": {
     "cffi-mixed": {
       "cargo_manifest_path": "Cargo.toml",

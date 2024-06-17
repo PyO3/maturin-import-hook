@@ -200,9 +200,9 @@ dependencies = [
 
 [[package]]
 name = "cargo-config2"
-version = "0.1.22"
+version = "0.1.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3108787cb889089c29b110a3a7165c7c942f081c91d46c477818c33202b2a9cb"
+checksum = "d83ce0be8bd1479e5de6202def660e6c7e27e4e0599bffa4fed05bd380ec2ede"
 dependencies = [
  "home",
  "serde",
@@ -212,9 +212,9 @@ dependencies = [
 
 [[package]]
 name = "cargo-options"
-version = "0.7.2"
+version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cad71bf996c8e5b9d28ef3472d7ee41f277edf4e38cd597f51ad0438d05d76ea"
+checksum = "f3540247c0a37a76eb324acc238dc617786ea22c43b95da560c82a8f2714321f"
 dependencies = [
  "anstyle",
  "clap",
@@ -254,9 +254,9 @@ dependencies = [
 
 [[package]]
 name = "cargo-zigbuild"
-version = "0.18.3"
+version = "0.18.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb76e6ab558f9138291c7e1fa954ffd58e060712eab13f97a317da712218ca24"
+checksum = "65004153e67ac23be88a8e244304a872d727b2aa08654dcabfbecd1fdea4a488"
 dependencies = [
  "anyhow",
  "cargo-options",
@@ -949,7 +949,7 @@ dependencies = [
 
 [[package]]
 name = "maturin"
-version = "1.5.1"
+version = "1.6.0"
 dependencies = [
  "anyhow",
  "base64 0.21.7",
@@ -1497,9 +1497,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.22.2"
+version = "0.22.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e87c9956bd9807afa1f77e0f7594af32566e830e088a5576d27c5b6f30f49d41"
+checksum = "bf4ef73721ac7bcd79b2b315da7779d8fc09718c6b3d2d1b2d94850eb8c18432"
 dependencies = [
  "log",
  "ring",

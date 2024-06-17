@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import os
 import platform
 import re
 import subprocess
@@ -30,12 +31,13 @@ log = logging.getLogger(__name__)
 
 def test_maturin_unchanged() -> None:
     """if new options have been added to maturin then the import hook needs to be updated to match"""
+    env = {"PATH": os.environ["PATH"], "COLUMNS": "120"}
 
-    build_help = subprocess.check_output(["maturin", "build", "--help"])
-    assert hashlib.sha1(build_help).hexdigest() == "f3ea5264a77e621d3e7e31afd80d96b51cc74154"
+    build_help = subprocess.check_output("stty rows 50 cols 120; maturin build --help", shell=True, env=env)  # noqa: S602
+    assert hashlib.sha1(build_help).hexdigest() == "99f80713607f23c53a0a936c36789c7c4186d5a9"
 
-    develop_help = subprocess.check_output(["maturin", "develop", "--help"])
-    assert hashlib.sha1(develop_help).hexdigest() == "30aed063dbaf2816ac474fa0aebb444bf326aa6b"
+    develop_help = subprocess.check_output("stty rows 50 cols 120; maturin develop --help", shell=True, env=env)  # noqa: S602
+    assert hashlib.sha1(develop_help).hexdigest() == "ad7036a829c6801224933d589b1f9848678c9458"
 
 
 def test_settings() -> None:

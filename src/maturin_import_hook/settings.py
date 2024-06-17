@@ -121,6 +121,7 @@ class MaturinDevelopSettings(MaturinSettings):
     """settings for `maturin develop`."""
 
     extras: Optional[list[str]] = None
+    uv: bool = False
     skip_install: bool = False
 
     @staticmethod
@@ -132,6 +133,8 @@ class MaturinDevelopSettings(MaturinSettings):
         if self.extras is not None:
             args.append("--extras")
             args.append(",".join(self.extras))
+        if self.uv:
+            args.append("--uv")
         if self.skip_install:
             args.append("--skip-install")
         args.extend(super().to_args())
