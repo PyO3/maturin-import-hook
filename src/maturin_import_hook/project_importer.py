@@ -374,7 +374,7 @@ def _is_editable_installed_package(project_dir: Path, package_name: str) -> bool
     return False
 
 
-@functools.lru_cache(maxsize=None) # number of serach paths should be small
+@functools.cache
 def _find_maturin_project_above(path: Path) -> Optional[Path]:
     for search_path in itertools.chain((path,), path.parents):
         if is_maybe_maturin_project(search_path):
