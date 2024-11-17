@@ -99,7 +99,7 @@ class MaturinSettings:
 class MaturinBuildSettings(MaturinSettings):
     """settings for `maturin build`."""
 
-    skip_auditwheel: bool = False
+    auditwheel: Optional[str] = None
     zig: bool = False
 
     @staticmethod
@@ -108,8 +108,9 @@ class MaturinBuildSettings(MaturinSettings):
 
     def to_args(self) -> list[str]:
         args = []
-        if self.skip_auditwheel:
-            args.append("--skip-auditwheel")
+        if self.auditwheel is not None:
+            args.append("--auditwheel")
+            args.append(self.auditwheel)
         if self.zig:
             args.append("--zig")
         args.extend(super().to_args())

@@ -1,7 +1,8 @@
 import importlib
 
-import maturin_import_hook
 import test_project  # type: ignore[missing-import]
+
+import maturin_import_hook
 
 maturin_import_hook.install()  # install after importing so that the first reload triggers a build
 

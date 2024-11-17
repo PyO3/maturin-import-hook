@@ -13,6 +13,7 @@ from textwrap import dedent
 from typing import Optional
 
 import pytest
+
 from maturin_import_hook.project_importer import DefaultProjectFileSearcher, _load_dist_info
 
 from .common import (
@@ -462,14 +463,14 @@ def test_rebuild_on_change_to_path_dependency(workspace: Path) -> None:
         """),
     )
 
-    output1, duration1 = run_python_code(check_installed)
+    output1, _duration1 = run_python_code(check_installed)
     assert "21 is half 42: True" in output1
     assert "21 is half 63: False" in output1
 
     transitive_dep_lib = transitive_dep_dir / "src/lib.rs"
     transitive_dep_lib.write_text(transitive_dep_lib.read_text().replace("x + y == sum", "x + x + y == sum"))
 
-    output2, duration2 = run_python_code(check_installed)
+    output2, _duration2 = run_python_code(check_installed)
     assert "21 is half 42: False" in output2
     assert "21 is half 63: True" in output2
 
@@ -1079,12 +1080,7 @@ class TestLogging:
         self._create_clean_project(workspace, is_mixed)
 
         output, _ = run_python_code(self._logging_helper())
-        pattern = (
-            'building "test_project"\n'
-            'rebuilt and loaded package "test_project" in [0-9.]+s\n'
-            "value 10\n"
-            "SUCCESS\n"
-        )
+        pattern = 'building "test_project"\nrebuilt and loaded package "test_project" in [0-9.]+s\nvalue 10\nSUCCESS\n'
         check_match(output, pattern, flags=re.MULTILINE)
 
     @pytest.mark.parametrize("is_mixed", [False, True])

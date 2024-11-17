@@ -2,6 +2,7 @@ from pathlib import Path
 from textwrap import dedent
 
 import pytest
+
 from maturin_import_hook._site import (
     has_automatic_installation,
     insert_automatic_installation,
