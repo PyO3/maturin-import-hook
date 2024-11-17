@@ -388,10 +388,21 @@ def _find_maturin_project_above(path: Path) -> Optional[Path]:
     return None
 
 
+def _find_dist_info_path(directory: Path, package_name: str) -> Optional[Path]:
+    try:
+        names = os.listdir(directory)
+    except FileNotFoundError:
+        return None
+    for name in names:
+        if name.startswith(package_name) and name.endswith(".dist-info"):
+            return Path(directory / name)
+    return None
+
+
 def _load_dist_info(
     path: Path, package_name: str, *, require_project_target: bool = True
 ) -> tuple[Optional[Path], bool]:
-    dist_info_path = next(path.glob(f"{package_name}-*.dist-info"), None)
+    dist_info_path = _find_dist_info_path(path, package_name)
     if dist_info_path is None:
         return None, False
     try:
