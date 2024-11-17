@@ -39,6 +39,8 @@ To update maturin:
       test crates and update `uniffi-bindgen` in `requirements.txt` to match.
 - check that no crates have been added to `test-crates` that should be excluded from the import hook tests.
   If so, add them to `IGNORED_TEST_CRATES` in `common.py`
+- upgrade the test packages in `test_import_hook/*_helpers`
+    - check what version of `pyo3` is used by the command: `maturin new --bindings pyo3`
 - update the version check in the import hook to ensure it allows using the new version
 - run the tests to ensure everything still works
 
