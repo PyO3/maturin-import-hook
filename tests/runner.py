@@ -122,7 +122,7 @@ def _pip_install_command(interpreter_path: Path) -> list[str]:
 
 
 def _create_test_venv(python: Path, venv_dir: Path) -> VirtualEnv:
-    venv = VirtualEnv.new(venv_dir, python)
+    venv = VirtualEnv.create(venv_dir, python)
     log.info("installing test requirements into virtualenv")
     proc = subprocess.run(
         [
@@ -156,13 +156,22 @@ def _create_virtual_env_command(interpreter_path: Path, venv_path: Path) -> list
         return [str(interpreter_path), "-m", "venv", str(venv_path)]
 
 
+def _install_into_virtual_env_command(interpreter_path: Path, package_path: Path) -> list[str]:
+    if shutil.which("uv") is not None:
+        log.info("using uv to install package as editable")
+        return ["uv", "pip", "install", "--python", str(interpreter_path), "--editable", str(package_path)]
+    else:
+        log.info("using pip to install package as editable")
+        return [str(interpreter_path), "-m", "pip", "install", "--editable", str(package_path)]
+
+
 class VirtualEnv:
     def __init__(self, root: Path) -> None:
         self._root = root.resolve()
         self._is_windows = platform.system() == "Windows"
 
     @staticmethod
-    def new(root: Path, interpreter_path: Path) -> VirtualEnv:
+    def create(root: Path, interpreter_path: Path) -> VirtualEnv:
         if root.exists():
             log.info("removing virtualenv at %s", root)
             shutil.rmtree(root)
@@ -193,6 +202,11 @@ class VirtualEnv:
             interpreter = self.bin_dir / "python"
         assert interpreter.exists()
         return interpreter
+
+    def install_editable_package(self, package_path: Path) -> None:
+        cmd = _install_into_virtual_env_command(self.interpreter_path, package_path)
+        proc = subprocess.run(cmd, capture_output=True, check=True)
+        log.debug("%s", proc.stdout.decode())
 
     def activate(self, env: dict[str, str]) -> None:
         """set the environment as-if venv/bin/activate was run"""
@@ -254,7 +268,7 @@ def main() -> None:
     parser.add_argument(
         "--name",
         default="Tests",
-        help="the name for the suite of tests this run (use to distinguish between OS/python version)",
+        help="the name to assign for the suite of tests this run (use to distinguish between OS/python version)",
     )
 
     parser.add_argument(
