@@ -86,6 +86,9 @@ class ProjectResolver:
     def __init__(self) -> None:
         self._resolved_project_cache: dict[Path, Optional[MaturinProject]] = {}
 
+    def clear_cache(self) -> None:
+        self._resolved_project_cache.clear()
+
     def resolve(self, project_dir: Path) -> Optional["MaturinProject"]:
         if project_dir not in self._resolved_project_cache:
             resolved = None
