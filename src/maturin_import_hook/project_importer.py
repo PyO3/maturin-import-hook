@@ -14,6 +14,7 @@ import urllib.parse
 import urllib.request
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Sequence
+from functools import lru_cache
 from importlib.machinery import ExtensionFileLoader, ModuleSpec, PathFinder
 from pathlib import Path
 from types import ModuleType
@@ -101,6 +102,12 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
         if self._maturin_path is None:
             self._maturin_path = find_maturin((1, 5, 0), (2, 0, 0))
         return self._maturin_path
+
+    def invalidate_caches(self) -> None:
+        """called by importlib.invalidate_caches()"""
+        logger.info("clearing cache")
+        self._resolver.clear_cache()
+        _find_maturin_project_above.cache_clear()
 
     def find_spec(
         self,
@@ -373,6 +380,7 @@ def _is_editable_installed_package(project_dir: Path, package_name: str) -> bool
     return False
 
 
+@lru_cache(maxsize=4096)
 def _find_maturin_project_above(path: Path) -> Optional[Path]:
     for search_path in itertools.chain((path,), path.parents):
         if is_maybe_maturin_project(search_path):
@@ -380,10 +388,21 @@ def _find_maturin_project_above(path: Path) -> Optional[Path]:
     return None
 
 
+def _find_dist_info_path(directory: Path, package_name: str) -> Optional[Path]:
+    try:
+        names = os.listdir(directory)
+    except FileNotFoundError:
+        return None
+    for name in names:
+        if name.startswith(package_name) and name.endswith(".dist-info"):
+            return Path(directory / name)
+    return None
+
+
 def _load_dist_info(
     path: Path, package_name: str, *, require_project_target: bool = True
 ) -> tuple[Optional[Path], bool]:
-    dist_info_path = next(path.glob(f"{package_name}-*.dist-info"), None)
+    dist_info_path = _find_dist_info_path(path, package_name)
     if dist_info_path is None:
         return None, False
     try:

@@ -66,6 +66,19 @@ Connect to the debugger, eg [using vscode](https://code.visualstudio.com/docs/py
 Note: set `CLEAR_WORKSPACE = False` in `common.py` if you want to prevent the temporary files generated during the test
 from being cleared.
 
+### Benchmarking
+
+The `create_benchmark_data.py` script creates a directory with many python packages to represent a worst case scenario.
+Run the script then run `venv/bin/python run.py` from the created directory.
+
+One way of obtaining profiling information is to run:
+
+```sh
+venv/bin/python -m cProfile -o profile.prof run.py
+pyprof2calltree -i profile.prof -o profile.log
+kcachegrind profile.log
+```
+
 ### Caching
 
 sccache is a tool for caching build artifacts to speed up compilation. Unfortunately, it is currently useless for these

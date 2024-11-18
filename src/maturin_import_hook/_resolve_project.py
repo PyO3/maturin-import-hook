@@ -25,6 +25,10 @@ class _TomlFile:
             data = tomllib.load(f)
         return _TomlFile(path, data)
 
+    @staticmethod
+    def from_string(path: Path, data_str: str) -> "_TomlFile":
+        return _TomlFile(path, tomllib.loads(data_str))
+
     def get_value_or_default(self, keys: list[str], required_type: type[_T], default: _T) -> _T:
         value = self.get_value(keys, required_type)
         return default if value is None else value
@@ -57,10 +61,12 @@ class _TomlFile:
 def find_cargo_manifest(project_dir: Path) -> Optional[Path]:
     pyproject_path = project_dir / "pyproject.toml"
     if pyproject_path.exists():
-        pyproject = _TomlFile.load(pyproject_path)
-        relative_manifest_path = pyproject.get_value(["tool", "maturin", "manifest-path"], str)
-        if relative_manifest_path is not None:
-            return project_dir / relative_manifest_path
+        pyproject_data = pyproject_path.read_text()
+        if "manifest-path" in pyproject_data:
+            pyproject = _TomlFile.from_string(pyproject_path, pyproject_data)
+            relative_manifest_path = pyproject.get_value(["tool", "maturin", "manifest-path"], str)
+            if relative_manifest_path is not None:
+                return project_dir / relative_manifest_path
 
     manifest_path = project_dir / "Cargo.toml"
     if manifest_path.exists():
@@ -79,6 +85,9 @@ def is_maybe_maturin_project(project_dir: Path) -> bool:
 class ProjectResolver:
     def __init__(self) -> None:
         self._resolved_project_cache: dict[Path, Optional[MaturinProject]] = {}
+
+    def clear_cache(self) -> None:
+        self._resolved_project_cache.clear()
 
     def resolve(self, project_dir: Path) -> Optional["MaturinProject"]:
         if project_dir not in self._resolved_project_cache:
