@@ -5,6 +5,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+
 from maturin_import_hook import reset_logger
 from maturin_import_hook._building import get_default_build_dir
 
@@ -19,7 +20,7 @@ log = logging.getLogger(__name__)
 log.info("running tests with %s", sys.executable)
 
 
-@pytest.fixture()
+@pytest.fixture
 def workspace(tmp_path: Path) -> Iterator[Path]:
     try:
         yield tmp_path

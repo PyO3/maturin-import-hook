@@ -60,7 +60,7 @@ class _TomlFile:
 
 def find_cargo_manifest(project_dir: Path) -> Optional[Path]:
     pyproject_path = project_dir / "pyproject.toml"
-    if pyproject_path.exists():
+    if pyproject_path.is_file():
         pyproject_data = pyproject_path.read_text()
         if "manifest-path" in pyproject_data:
             pyproject = _TomlFile.from_string(pyproject_path, pyproject_data)
@@ -69,17 +69,17 @@ def find_cargo_manifest(project_dir: Path) -> Optional[Path]:
                 return project_dir / relative_manifest_path
 
     manifest_path = project_dir / "Cargo.toml"
-    if manifest_path.exists():
+    if manifest_path.is_file():
         return manifest_path
     manifest_path = project_dir / "rust/Cargo.toml"
-    if manifest_path.exists():
+    if manifest_path.is_file():
         return manifest_path
     return None
 
 
-def is_maybe_maturin_project(project_dir: Path) -> bool:
+def is_maybe_maturin_project(directory: Path) -> bool:
     """note: this function does not check if this really is a maturin project for simplicity."""
-    return (project_dir / "pyproject.toml").exists() and find_cargo_manifest(project_dir) is not None
+    return (directory / "pyproject.toml").is_file() and find_cargo_manifest(directory) is not None
 
 
 class ProjectResolver:
@@ -247,8 +247,8 @@ def _get_immediate_path_dependencies(manifest_dir_path: Path, cargo: _TomlFile) 
     path_dependencies = []
     for dependency in cargo.get_value_or_default(["dependencies"], dict, {}).values():
         if isinstance(dependency, dict):
-            relative_path = dependency.get("path", None)
-            if relative_path is not None:
+            relative_path: Any = dependency.get("path", None)
+            if relative_path is not None and isinstance(relative_path, str):
                 path_dependencies.append((manifest_dir_path / relative_path).resolve())
     return path_dependencies
 

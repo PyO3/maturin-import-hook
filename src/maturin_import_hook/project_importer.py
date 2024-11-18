@@ -104,7 +104,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
         return self._maturin_path
 
     def invalidate_caches(self) -> None:
-        """called by importlib.invalidate_caches()"""
+        """called by `importlib.invalidate_caches()`"""
         logger.info("clearing cache")
         self._resolver.clear_cache()
         _find_maturin_project_above.cache_clear()

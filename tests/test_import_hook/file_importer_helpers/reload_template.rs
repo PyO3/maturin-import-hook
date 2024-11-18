@@ -40,7 +40,7 @@ impl Integer {
     }
 
     fn __richcmp__(&self, other: &Self, op: CompareOp, py: Python<'_>) -> PyResult<bool> {
-        let logging = PyModule::import_bound(py, "logging")?;
+        let logging = PyModule::import(py, "logging")?;
         let message = format!(
             "comparing Integer instances {} and {}",
             self.name, other.name
@@ -66,7 +66,7 @@ impl PicklableInteger {
     }
 
     fn __richcmp__(&self, other: &Self, op: CompareOp, py: Python<'_>) -> PyResult<bool> {
-        let logging = PyModule::import_bound(py, "logging")?;
+        let logging = PyModule::import(py, "logging")?;
         let message = format!(
             "comparing PicklableInteger instances {} and {}",
             self.name, other.name
@@ -89,35 +89,35 @@ fn get_str() -> String {
 }
 
 fn register_child_module(py: Python<'_>, parent_module: &Bound<'_, PyModule>) -> PyResult<()> {
-    let child_module = PyModule::new_bound(py, "child")?;
-    child_module.add_wrapped(wrap_pyfunction!(get_str))?;
+    let child_module = PyModule::new(py, "child")?;
+    child_module.add_function(wrap_pyfunction!(get_str, &child_module)?)?;
     parent_module.add_submodule(&child_module)?;
     Ok(())
 }
 
 #[pymodule]
 fn my_module(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_wrapped(wrap_pyfunction!(get_num))?;
-    m.add_wrapped(wrap_pyfunction!(get_global_num))?;
-    m.add_wrapped(wrap_pyfunction!(set_global_num))?;
+    m.add_function(wrap_pyfunction!(get_num, m)?)?;
+    m.add_function(wrap_pyfunction!(get_global_num, m)?)?;
+    m.add_function(wrap_pyfunction!(set_global_num, m)?)?;
     m.add_class::<Integer>()?;
     m.add_class::<PicklableInteger>()?;
 
     register_child_module(py, m)?;
 
-    let data = PyDict::new_bound(py);
+    let data = PyDict::new(py);
     data.set_item("foo", 123)?;
     m.add("data", data)?;
 
     if !m.hasattr("data_init_once")? {
-        let data = PyDict::new_bound(py);
+        let data = PyDict::new(py);
         data.set_item("foo", 123)?;
         m.add("data_init_once", data)?;
     }
 
     m.add("data_str", "foo")?;
 
-    let logging = PyModule::import_bound(py, "logging")?;
+    let logging = PyModule::new(py, "logging")?;
     logging
         .getattr("info")?
         .call1(("my_module extension module initialised",))?;
