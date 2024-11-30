@@ -6,7 +6,7 @@ pub fn do_something(a: usize, b: usize) -> PyResult<usize> {
 }
 
 #[pymodule]
-pub fn my_rust_module(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+pub fn my_rust_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(do_something, m)?)?;
     Ok(())
 }

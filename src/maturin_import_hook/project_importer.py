@@ -172,6 +172,8 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
                 logger.info('rebuilt and loaded package "%s" in %.3fs', package_name, duration)
             else:
                 logger.debug('loaded package "%s" in %.3fs', package_name, duration)
+        elif logger.isEnabledFor(logging.DEBUG):
+            logger.debug('%s did not find "%s"', type(self).__name__, package_name)
         return spec
 
     def _handle_reload(self, package_name: str, spec: ModuleSpec) -> ModuleSpec:

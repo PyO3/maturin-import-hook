@@ -8,9 +8,10 @@ import site
 import subprocess
 import sys
 from collections.abc import Iterator
+from enum import Enum
 from pathlib import Path
 from textwrap import dedent
-from typing import Optional
+from typing import Any
 
 import pytest
 
@@ -358,7 +359,7 @@ def test_concurrent_import(workspace: Path, initially_mixed: bool, mixed: bool) 
     shutil.rmtree(project_dir)
     _get_project_copy(TEST_CRATES_DIR / project_name, project_dir)
 
-    args = {"python_script": check_installed_with_hook, "quiet": True}
+    args: dict[str, Any] = {"python_script": check_installed_with_hook, "quiet": True}
 
     if platform.system() == "Windows" and platform.python_implementation() == "PyPy":
         # workaround for https://github.com/pypy/pypy/issues/4917
@@ -1339,22 +1340,29 @@ def _rebuilt_message(project_name: str) -> str:
     return f'rebuilt and loaded package "{with_underscores(project_name)}"'
 
 
-_UV_AVAILABLE: Optional[bool] = None
+class PackageInstaller(Enum):
+    PIP = "pip"
+    UV = "uv"
+
+    def __str__(self) -> str:
+        return self.value
 
 
-def uv_available() -> bool:
-    """whether the `uv` command is installed"""
-    global _UV_AVAILABLE
-    if _UV_AVAILABLE is None:
-        _UV_AVAILABLE = shutil.which("uv") is not None
-    return _UV_AVAILABLE
+def get_package_installer() -> PackageInstaller:
+    # set by `runner.py`
+    key = "MATURIN_IMPORT_HOOK_TEST_PACKAGE_INSTALLER"
+    if key not in os.environ:
+        msg = f"environment variable {key} not set"
+        raise RuntimeError(msg)
+    return PackageInstaller(os.environ[key])
 
 
 def _uninstall(*project_names: str) -> None:
     log.info("uninstalling %s", sorted(project_names))
-    if uv_available():
+    installer = get_package_installer()
+    if installer == PackageInstaller.UV:
         cmd = ["uv", "pip", "uninstall", "--python", str(sys.executable), *project_names]
-    else:
+    elif installer == PackageInstaller.PIP:
         cmd = [
             sys.executable,
             "-m",
@@ -1364,13 +1372,16 @@ def _uninstall(*project_names: str) -> None:
             "-y",
             *project_names,
         ]
+    else:
+        raise ValueError(installer)
     subprocess.check_call(cmd)
 
 
 def _get_installed_package_names() -> set[str]:
-    if uv_available():
+    installer = get_package_installer()
+    if installer == PackageInstaller.UV:
         cmd = ["uv", "pip", "list", "--python", sys.executable, "--format", "json"]
-    else:
+    elif installer == PackageInstaller.PIP:
         cmd = [
             sys.executable,
             "-m",
@@ -1379,6 +1390,8 @@ def _get_installed_package_names() -> set[str]:
             "list",
             "--format=json",
         ]
+    else:
+        raise ValueError(installer)
     packages = json.loads(subprocess.check_output(cmd).decode())
     return {package["name"] for package in packages}
 
@@ -1391,15 +1404,21 @@ def _install_editable(project_dir: Path) -> None:
     assert maturin_path is not None
     env = os.environ.copy()
     env["VIRTUAL_ENV"] = sys.exec_prefix
-    subprocess.check_call([maturin_path, "develop", "--uv"], cwd=project_dir, env=env)
+    args = [maturin_path, "develop"]
+    if get_package_installer() == PackageInstaller.UV:
+        args.append("--uv")
+    subprocess.check_call(args, cwd=project_dir, env=env)
 
 
 def _install_non_editable(project_dir: Path) -> None:
     log.info("installing %s in non-editable mode", project_dir.name)
-    if uv_available():
+    installer = get_package_installer()
+    if installer == PackageInstaller.UV:
         cmd = ["uv", "pip", "install", "--python", sys.executable, str(project_dir)]
-    else:
+    elif installer == PackageInstaller.PIP:
         cmd = [sys.executable, "-m", "pip", "install", "--disable-pip-version-check", str(project_dir)]
+    else:
+        raise ValueError(installer)
     subprocess.check_call(cmd)
 
 
@@ -1433,11 +1452,14 @@ def _is_editable_installed_correctly(project_name: str, project_dir: Path, is_mi
         installed_editable_with_direct_url,
     )
 
-    if uv_available():
+    installer = get_package_installer()
+    if installer == PackageInstaller.UV:
         # TODO(matt): use uv once the --files option is supported https://github.com/astral-sh/uv/issues/2526
         cmd = [sys.executable, "-m", "pip", "show", "--disable-pip-version-check", "-f", project_name]
-    else:
+    elif installer == PackageInstaller.PIP:
         cmd = [sys.executable, "-m", "pip", "show", "--disable-pip-version-check", "-f", project_name]
+    else:
+        raise ValueError(installer)
 
     proc = subprocess.run(
         cmd,
@@ -1450,12 +1472,19 @@ def _is_editable_installed_correctly(project_name: str, project_dir: Path, is_mi
     return installed_editable_with_direct_url and (installed_as_pth == is_mixed)
 
 
-def _get_project_copy(project_dir: Path, output_path: Path) -> Path:
-    for relative_path in _get_relative_files_tracked_by_git(project_dir):
+def _get_project_copy(project_dir: Path, output_path: Path, *, use_git: bool = True) -> Path:
+    paths = _get_relative_files_tracked_by_git(project_dir) if use_git else _get_relative_files(project_dir)
+    for relative_path in paths:
         output_file_path = output_path / relative_path
         output_file_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(project_dir / relative_path, output_file_path)
     return output_path
+
+
+def _get_relative_files(root: Path) -> Iterator[Path]:
+    for p in root.rglob("*"):
+        if p.is_file():
+            yield p.relative_to(root)
 
 
 def _get_relative_files_tracked_by_git(root: Path) -> Iterator[Path]:

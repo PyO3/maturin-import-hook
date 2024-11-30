@@ -117,7 +117,7 @@ fn my_module(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     m.add("data_str", "foo")?;
 
-    let logging = PyModule::new(py, "logging")?;
+    let logging = PyModule::import(py, "logging")?;
     logging
         .getattr("info")?
         .call1(("my_module extension module initialised",))?;

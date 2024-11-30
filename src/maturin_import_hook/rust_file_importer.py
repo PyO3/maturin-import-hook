@@ -144,6 +144,8 @@ class MaturinRustFileImporter(importlib.abc.MetaPathFinder):
                 logger.info('rebuilt and loaded module "%s" in %.3fs', fullname, duration)
             else:
                 logger.debug('loaded module "%s" in %.3fs', fullname, duration)
+        elif logger.isEnabledFor(logging.DEBUG):
+            logger.debug('%s did not find "%s"', type(self).__name__, fullname)
 
         return spec
 

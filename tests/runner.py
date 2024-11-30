@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 
 # ruff: noqa: INP001
@@ -19,14 +20,24 @@ log = logging.getLogger("runner")
 logging.basicConfig(format="[%(name)s] [%(levelname)s] %(message)s", level=logging.DEBUG)
 
 
+class PackageInstaller(Enum):
+    PIP = "pip"
+    UV = "uv"
+
+    def __str__(self) -> str:
+        return self.value
+
+
 @dataclass
 class TestOptions:
     test_specification: str
     test_suite_name: str
     timeout: int
     max_failures: int | None
+    package_installer: PackageInstaller
     use_lld: bool
     profile: Path | None
+    maturin_debug: bool
     html_report: bool
     notify: bool
 
@@ -49,7 +60,7 @@ def _run_tests_serial(
     report_path = workspace / "report.html"
     report_path.unlink(missing_ok=True)
 
-    venv = _create_test_venv(python, workspace / "venv")
+    venv = _create_test_venv(python, workspace / "venv", options.package_installer)
     try:
         _run_test_in_environment(venv, workspace / "cache", reports_dir / "results.xml", options)
     finally:
@@ -78,6 +89,11 @@ def _run_test_in_environment(
     env["MATURIN_BUILD_DIR"] = str(cache_dir / "maturin_build_cache")
     env["CARGO_TARGET_DIR"] = str(cache_dir / "target")
 
+    env["MATURIN_IMPORT_HOOK_TEST_PACKAGE_INSTALLER"] = options.package_installer.value
+
+    if options.maturin_debug:
+        env["RUST_LOG"] = "maturin=debug"
+
     if options.use_lld:
         log.info("using lld")
         # https://stackoverflow.com/a/57817848
@@ -100,8 +116,8 @@ def _run_test_in_environment(
         sys.exit(proc.returncode)
 
 
-def _pip_install_command(interpreter_path: Path) -> list[str]:
-    if shutil.which("uv") is not None:
+def _package_install_command(interpreter_path: Path, package_installer: PackageInstaller) -> list[str]:
+    if package_installer == PackageInstaller.UV:
         log.info("using uv to install packages")
         return [
             "uv",
@@ -110,7 +126,7 @@ def _pip_install_command(interpreter_path: Path) -> list[str]:
             "--python",
             str(interpreter_path),
         ]
-    else:
+    elif package_installer == PackageInstaller.PIP:
         log.info("using pip to install packages")
         return [
             str(interpreter_path),
@@ -119,14 +135,16 @@ def _pip_install_command(interpreter_path: Path) -> list[str]:
             "install",
             "--disable-pip-version-check",
         ]
+    else:
+        raise ValueError(package_installer)
 
 
-def _create_test_venv(python: Path, venv_dir: Path) -> VirtualEnv:
-    venv = VirtualEnv.create(venv_dir, python)
+def _create_test_venv(python: Path, venv_dir: Path, package_installer: PackageInstaller) -> VirtualEnv:
+    venv = VirtualEnv.create(venv_dir, python, package_installer)
     log.info("installing test requirements into virtualenv")
     proc = subprocess.run(
         [
-            *_pip_install_command(venv.interpreter_path),
+            *_package_install_command(venv.interpreter_path, package_installer),
             "-r",
             "requirements.txt",
         ],
@@ -144,8 +162,10 @@ def _create_test_venv(python: Path, venv_dir: Path) -> VirtualEnv:
     return venv
 
 
-def _create_virtual_env_command(interpreter_path: Path, venv_path: Path) -> list[str]:
-    if shutil.which("uv") is not None:
+def _create_virtual_env_command(
+    interpreter_path: Path, venv_path: Path, package_installer: PackageInstaller
+) -> list[str]:
+    if package_installer == PackageInstaller.UV:
         log.info("using uv to create virtual environments")
         return ["uv", "venv", "--seed", "--python", str(interpreter_path), str(venv_path)]
     elif shutil.which("virtualenv") is not None:
@@ -156,8 +176,10 @@ def _create_virtual_env_command(interpreter_path: Path, venv_path: Path) -> list
         return [str(interpreter_path), "-m", "venv", str(venv_path)]
 
 
-def _install_into_virtual_env_command(interpreter_path: Path, package_path: Path) -> list[str]:
-    if shutil.which("uv") is not None:
+def _install_into_virtual_env_command(
+    interpreter_path: Path, package_path: Path, package_installer: PackageInstaller
+) -> list[str]:
+    if package_installer == PackageInstaller.UV:
         log.info("using uv to install package as editable")
         return ["uv", "pip", "install", "--python", str(interpreter_path), "--editable", str(package_path)]
     else:
@@ -166,23 +188,24 @@ def _install_into_virtual_env_command(interpreter_path: Path, package_path: Path
 
 
 class VirtualEnv:
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, package_installer: PackageInstaller) -> None:
         self._root = root.resolve()
         self._is_windows = platform.system() == "Windows"
+        self._package_installer = package_installer
 
     @staticmethod
-    def create(root: Path, interpreter_path: Path) -> VirtualEnv:
+    def create(root: Path, interpreter_path: Path, package_installer: PackageInstaller) -> VirtualEnv:
         if root.exists():
             log.info("removing virtualenv at %s", root)
             shutil.rmtree(root)
         if not interpreter_path.exists():
             raise FileNotFoundError(interpreter_path)
         log.info("creating test virtualenv at '%s' from '%s'", root, interpreter_path)
-        cmd = _create_virtual_env_command(interpreter_path, root)
+        cmd = _create_virtual_env_command(interpreter_path, root, package_installer)
         proc = subprocess.run(cmd, capture_output=True, check=True)
         log.debug("%s", proc.stdout.decode())
         assert root.is_dir()
-        return VirtualEnv(root)
+        return VirtualEnv(root, package_installer)
 
     @property
     def root_dir(self) -> Path:
@@ -204,7 +227,7 @@ class VirtualEnv:
         return interpreter
 
     def install_editable_package(self, package_path: Path) -> None:
-        cmd = _install_into_virtual_env_command(self.interpreter_path, package_path)
+        cmd = _install_into_virtual_env_command(self.interpreter_path, package_path, self._package_installer)
         proc = subprocess.run(cmd, capture_output=True, check=True)
         log.debug("%s", proc.stdout.decode())
 
@@ -297,9 +320,21 @@ def main() -> None:
         help="send a notification when finished",
     )
     parser.add_argument(
+        "--installer",
+        choices=list(PackageInstaller),
+        type=PackageInstaller,
+        default=PackageInstaller.UV,
+        help="the package installer to use in the tests",
+    )
+    parser.add_argument(
         "--lld",
         action="store_true",
         help="use lld for linking (generally faster than the default).",
+    )
+    parser.add_argument(
+        "--maturin_debug",
+        action="store_true",
+        help="have maturin produce verbose logs",
     )
     parser.add_argument(
         "--profile",
@@ -321,8 +356,10 @@ def main() -> None:
         test_suite_name=args.name,
         timeout=args.timeout,
         max_failures=args.max_failures,
+        package_installer=args.installer,
         use_lld=args.lld,
         profile=args.profile,
+        maturin_debug=args.maturin_debug,
         html_report=args.html_report,
         notify=args.notify,
     )

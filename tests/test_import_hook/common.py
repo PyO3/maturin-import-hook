@@ -31,6 +31,7 @@ IGNORED_TEST_CRATES = {
     "hello-world",  # not imported as a python module (subprocess only)
     "license-test",  # not imported as a python module (subprocess only)
     "pyo3-bin",  # not imported as a python module (subprocess only)
+    "workspace-inverted-order",  # this directory is not a maturin package, only the subdirectory
 }
 
 

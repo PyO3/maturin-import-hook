@@ -6,7 +6,7 @@ pub fn get_num() -> PyResult<usize> {
 }
 
 #[pymodule]
-pub fn my_rust_module(_py: Python, m: &PyModule) -> PyResult<()> {
+pub fn my_rust_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get_num, m)?)?;
     Ok(())
 }
