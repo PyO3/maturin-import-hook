@@ -44,6 +44,17 @@ To update maturin:
 - update the version check in the import hook to ensure it allows using the new version
 - run the tests to ensure everything still works
 
+Released versions of the import hook should use a tagged version of maturin, but during development, in order
+to use a specific maturin commit:
+
+- use `maturin @ git+https://github.com/PyO3/maturin@xxxxxxx` in `requirements.txt`
+    - where `xxxxxxx` is a git commit hash
+- `export MATURIN_SETUP_ARGS="--features=scaffolding"` before running `runner.py`
+    - the `setup.py` of `maturin` uses this environment variable when building from source. the `scaffolding` feature
+    is required for `maturin new`.
+    - Make sure a cached built version of this commit is not available because `uv` doesn't know about the
+    environment variable. run `uv cache clean maturin` to remove any cached versions.
+
 ## Notes
 
 ### Debugging

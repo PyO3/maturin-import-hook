@@ -208,7 +208,7 @@ def get_maturin_version(maturin_path: Path) -> tuple[int, int, int]:
     if not success:
         msg = f'running "{maturin_path} --version" failed'
         raise MaturinError(msg)
-    match = re.fullmatch(r"maturin ([0-9]+)\.([0-9]+)\.([0-9]+)\n", output)
+    match = re.fullmatch(r"maturin ([0-9]+)\.([0-9]+)\.([0-9]+)(-.*)?\n", output)
     if match is None:
         msg = f'unexpected version string: "{output}"'
         raise MaturinError(msg)
