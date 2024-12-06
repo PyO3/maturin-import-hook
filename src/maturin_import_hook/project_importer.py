@@ -484,9 +484,11 @@ class DefaultProjectFileSearcher(ProjectFileSearcher):
     }
     DEFAULT_SOURCE_EXCLUDED_DIR_MARKERS: ClassVar[set[str]] = {
         "CACHEDIR.TAG",  # https://bford.info/cachedir/
+        ".maturin_hook_ignore",
     }
     DEFAULT_SOURCE_EXCLUDED_FILE_EXTENSIONS: ClassVar[set[str]] = {
         ".so",
+        ".py",
         ".pyc",
     }
 
