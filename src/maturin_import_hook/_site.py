@@ -1,35 +1,36 @@
+import dataclasses
+import importlib
+import shlex
+import shutil
 import site
 from pathlib import Path
-from textwrap import dedent
+from typing import Optional
 
 from maturin_import_hook._logging import logger
+from maturin_import_hook.settings import MaturinSettings
 
 MANAGED_INSTALL_START = "# <maturin_import_hook>"
 MANAGED_INSTALL_END = "# </maturin_import_hook>\n"
 MANAGED_INSTALL_COMMENT = """
-# the following commands install the maturin import hook during startup.
+# the following installs the maturin import hook during startup.
 # see: `python -m maturin_import_hook site`
 """
 
-MANAGED_INSTALLATION_PRESETS = {
-    "debug": dedent("""\
-        try:
-            import maturin_import_hook
-        except ImportError:
-            pass
-        else:
-            maturin_import_hook.install()
-    """),
-    "release": dedent("""\
-        try:
-            import maturin_import_hook
-            from maturin_import_hook.settings import MaturinSettings
-        except ImportError:
-            pass
-        else:
-            maturin_import_hook.install(MaturinSettings(release=True))
-    """),
-}
+INSTALL_TEMPLATE = """\
+try:
+    import maturin_import_hook
+    from maturin_import_hook.settings import MaturinSettings
+except ImportError:
+    pass
+else:
+    maturin_import_hook.install(
+        settings=MaturinSettings(
+            {settings}
+        ),
+        enable_project_importer={enable_project_importer},
+        enable_rs_file_importer={enable_rs_file_importer},
+    )
+"""
 
 
 def get_sitecustomize_path() -> Path:
@@ -83,10 +84,44 @@ def remove_automatic_installation(module_path: Path) -> None:
         module_path.unlink(missing_ok=True)
 
 
-def insert_automatic_installation(module_path: Path, preset_name: str, force: bool) -> None:
-    if preset_name not in MANAGED_INSTALLATION_PRESETS:
-        msg = f"Unknown managed installation preset name: '{preset_name}'"
-        raise ValueError(msg)
+def _should_use_uv() -> bool:
+    """Whether the `--uv` flag should be used when installing into this environment.
+
+    virtual environments managed with `uv` do not have `pip` installed so the `--uv` flag is required.
+    """
+    try:
+        importlib.import_module("pip")
+    except ModuleNotFoundError:
+        if shutil.which("uv") is not None:
+            return True
+        else:
+            logger.warning("neither `pip` nor `uv` were found. `maturin develop` may not work...")
+            return False
+    else:
+        # since pip is a more established program, use it even if uv may be installed
+        return False
+
+
+def insert_automatic_installation(
+    module_path: Path,
+    force: bool,
+    args: Optional[str],
+    enable_project_importer: bool,
+    enable_rs_file_importer: bool,
+    detect_uv: bool,
+) -> None:
+    if args is None:
+        parsed_args = MaturinSettings.default()
+    else:
+        parsed_args = MaturinSettings.from_args(shlex.split(args))
+        if parsed_args.color is None:
+            parsed_args.color = True
+    if detect_uv and not parsed_args.uv and _should_use_uv():
+        parsed_args.uv = True
+        logger.info(
+            "using `--uv` flag as it was detected to be necessary for this environment. "
+            "Use `site install --no-detect-uv` to set manually."
+        )
 
     logger.info(f"installing automatic activation into '{module_path}'")
     if has_automatic_installation(module_path):
@@ -97,14 +132,22 @@ def insert_automatic_installation(module_path: Path, preset_name: str, force: bo
             logger.info("already installed. Aborting install.")
             return
 
-    parts = []
+    parts: list[str] = []
     if module_path.exists():
         parts.append(module_path.read_text())
         parts.append("\n")
+
+    defaults = MaturinSettings()
+    non_default_settings = {k: v for k, v in dataclasses.asdict(parsed_args).items() if getattr(defaults, k) != v}
+
     parts.extend([
         MANAGED_INSTALL_START,
         MANAGED_INSTALL_COMMENT,
-        MANAGED_INSTALLATION_PRESETS[preset_name],
+        INSTALL_TEMPLATE.format(
+            settings=",\n            ".join(f"{k}={v!r}" for k, v in non_default_settings.items()),
+            enable_project_importer=repr(enable_project_importer),
+            enable_rs_file_importer=repr(enable_rs_file_importer),
+        ),
         MANAGED_INSTALL_END,
     ])
     code = "".join(parts)

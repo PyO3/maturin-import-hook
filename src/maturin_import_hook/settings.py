@@ -1,16 +1,17 @@
+import argparse
+import re
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Optional
+from typing import IO, Any, Literal, Optional, Union
 
 __all__ = [
     "MaturinSettings",
-    "MaturinBuildSettings",
-    "MaturinDevelopSettings",
 ]
 
 
 @dataclass
 class MaturinSettings:
-    """Settings common to `maturin build` and `maturin develop`."""
+    """Settings common to `maturin build` and `maturin develop` relevant to the import hook.."""
 
     release: bool = False
     strip: bool = False
@@ -31,9 +32,14 @@ class MaturinSettings:
     verbose: int = 0
     rustc_flags: Optional[list[str]] = None
 
-    @staticmethod
-    def supported_commands() -> set[str]:
-        return {"build", "develop"}
+    # `maturin build` specific
+    auditwheel: Optional[str] = None
+    zig: bool = False
+
+    # `maturin develop` specific
+    extras: Optional[list[str]] = None
+    uv: bool = False
+    skip_install: bool = False
 
     @staticmethod
     def default() -> "MaturinSettings":
@@ -42,8 +48,8 @@ class MaturinSettings:
             color=True,
         )
 
-    def to_args(self) -> list[str]:
-        args = []
+    def to_args(self, cmd: Literal["develop", "build"]) -> list[str]:
+        args: list[str] = []
         if self.release:
             args.append("--release")
         if self.strip:
@@ -90,53 +96,122 @@ class MaturinSettings:
                 args.append(flag)
         if self.verbose > 0:
             args.append("-{}".format("v" * self.verbose))
+
+        if cmd == "build":
+            if self.auditwheel is not None:
+                args.append("--auditwheel")
+                args.append(self.auditwheel)
+            if self.zig:
+                args.append("--zig")
+
+        if cmd == "develop":
+            if self.extras is not None:
+                args.append("--extras")
+                args.append(",".join(self.extras))
+            if self.uv:
+                args.append("--uv")
+            if self.skip_install:
+                args.append("--skip-install")
+
         if self.rustc_flags is not None:
+            args.append("--")
             args.extend(self.rustc_flags)
+
         return args
-
-
-@dataclass
-class MaturinBuildSettings(MaturinSettings):
-    """settings for `maturin build`."""
-
-    auditwheel: Optional[str] = None
-    zig: bool = False
 
     @staticmethod
-    def supported_commands() -> set[str]:
-        return {"build"}
-
-    def to_args(self) -> list[str]:
-        args = []
-        if self.auditwheel is not None:
-            args.append("--auditwheel")
-            args.append(self.auditwheel)
-        if self.zig:
-            args.append("--zig")
-        args.extend(super().to_args())
-        return args
-
-
-@dataclass
-class MaturinDevelopSettings(MaturinSettings):
-    """settings for `maturin develop`."""
-
-    extras: Optional[list[str]] = None
-    uv: bool = False
-    skip_install: bool = False
+    def from_args(raw_args: list[str]) -> "MaturinSettings":
+        """Parse command line flags into this data structure"""
+        parser = MaturinSettings.parser()
+        args = parser.parse_args(raw_args)
+        if "--" in args.rustc_flags:
+            args.rustc_flags.remove("--")
+        if len(args.rustc_flags) == 0:
+            args.rustc_flags = None
+        return MaturinSettings(**vars(args))
 
     @staticmethod
-    def supported_commands() -> set[str]:
-        return {"develop"}
+    def parser() -> "NonExitingArgumentParser":
+        """Obtain an argument parser that can parse arguments related to this class"""
+        parser = NonExitingArgumentParser()
+        parser.add_argument("-r", "--release", action="store_true")
+        parser.add_argument("--strip", action="store_true")
+        parser.add_argument("-q", "--quiet", action="store_true")
+        parser.add_argument("-j", "--jobs", type=int)
+        parser.add_argument("--profile")
+        parser.add_argument("-F", "--features", type=lambda arg: re.split(",|[ ]", arg), action="extend")
+        parser.add_argument("--all-features", action="store_true")
+        parser.add_argument("--no-default-features", action="store_true")
+        parser.add_argument("--target")
+        parser.add_argument("--ignore-rust-version", action="store_true")
 
-    def to_args(self) -> list[str]:
-        args = []
-        if self.extras is not None:
-            args.append("--extras")
-            args.append(",".join(self.extras))
-        if self.uv:
-            args.append("--uv")
-        if self.skip_install:
-            args.append("--skip-install")
-        args.extend(super().to_args())
-        return args
+        def parse_color(arg: str) -> Optional[bool]:
+            if arg == "always":
+                return True
+            elif arg == "never":
+                return False
+            else:
+                return None
+
+        parser.add_argument("--color", type=parse_color)
+        parser.add_argument("--frozen", action="store_true")
+        parser.add_argument("--locked", action="store_true")
+        parser.add_argument("--offline", action="store_true")
+        parser.add_argument("--config", action=_KeyValueAction)
+        parser.add_argument("-Z", dest="unstable_flags", action="append")
+        parser.add_argument("-v", "--verbose", action="count", default=0)
+        parser.add_argument("rustc_flags", nargs=argparse.REMAINDER)
+
+        # `maturin build` specific
+        parser.add_argument("--auditwheel", choices=["repair", "check", "skip"])
+        parser.add_argument("--zig", action="store_true")
+
+        # `maturin develop` specific
+        parser.add_argument("-E", "--extras", type=lambda arg: arg.split(","), action="extend")
+        parser.add_argument("--uv", action="store_true")
+        parser.add_argument("--skip-install", action="store_true")
+
+        return parser
+
+
+class NonExitingArgumentParser(argparse.ArgumentParser):
+    """An `ArgumentParser` that does not call `sys.exit` if it fails to parse"""
+
+    def error(self, message: str) -> None:  # type: ignore[override]
+        msg = "argument parser error"
+        raise ValueError(msg)
+
+    def exit(self, status: int = 0, message: Optional[str] = None) -> None:  # type: ignore[override]
+        pass
+
+    def _print_message(self, message: str, file: Optional[IO[str]] = None) -> None:
+        pass
+
+
+class _KeyValueAction(argparse.Action):
+    """Parse 'key=value' arguments into a dictionary"""
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: Union[str, Sequence[Any], None],
+        option_string: Union[str, Sequence[Any], None] = None,
+    ) -> None:
+        if values is None:
+            values = []
+        elif isinstance(values, str):
+            values = [values]
+
+        key_value_store = getattr(namespace, self.dest)
+        if key_value_store is None:
+            key_value_store = {}
+            setattr(namespace, self.dest, key_value_store)
+
+        for value in values:
+            parts = value.split("=", maxsplit=2)
+            if len(parts) == 2:
+                key_value_store[parts[0]] = parts[1]
+            else:
+                msg = f"failed to parse KEY=VALUE from {value!r}"
+                raise ValueError(msg)

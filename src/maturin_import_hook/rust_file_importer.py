@@ -236,7 +236,7 @@ class MaturinRustFileImporter(importlib.abc.MetaPathFinder):
             build_status = BuildStatus(
                 extension_module_path.stat().st_mtime,
                 file_path,
-                settings.to_args(),
+                settings.to_args("build"),
                 maturin_output,
             )
             build_cache.store_build_status(build_status)
@@ -270,7 +270,7 @@ class MaturinRustFileImporter(importlib.abc.MetaPathFinder):
             return None, "no build status found"
         if build_status.source_path != source_path:
             return None, "source path in build status does not match the project dir"
-        if build_status.maturin_args != settings.to_args():
+        if build_status.maturin_args != settings.to_args("build"):
             return None, "current maturin args do not match the previous build"
 
         freshness = get_installation_freshness(

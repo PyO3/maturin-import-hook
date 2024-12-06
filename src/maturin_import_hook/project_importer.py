@@ -281,7 +281,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
                 if mtime is None:
                     logger.error("could not get installed package mtime")
                 else:
-                    build_status = BuildStatus(mtime, project_dir, settings.to_args(), maturin_output)
+                    build_status = BuildStatus(mtime, project_dir, settings.to_args("develop"), maturin_output)
                     build_cache.store_build_status(build_status)
 
         return spec, True
@@ -315,7 +315,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
             return None, "no build status found"
         if build_status.source_path != project_dir:
             return None, "source path in build status does not match the project dir"
-        if build_status.maturin_args != settings.to_args():
+        if build_status.maturin_args != settings.to_args("develop"):
             return None, "current maturin args do not match the previous build"
 
         installed_paths = self._file_searcher.get_installation_paths(installed_package_root)

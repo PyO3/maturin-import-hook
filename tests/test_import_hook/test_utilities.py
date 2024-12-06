@@ -6,7 +6,6 @@ import re
 import subprocess
 import time
 from pathlib import Path
-from typing import cast
 
 import pytest
 
@@ -14,7 +13,7 @@ from maturin_import_hook._building import BuildCache, BuildStatus, Freshness, ge
 from maturin_import_hook._resolve_project import _ProjectResolveError, _resolve_project, _TomlFile
 from maturin_import_hook.error import ImportHookError
 from maturin_import_hook.project_importer import _load_dist_info, _uri_to_path
-from maturin_import_hook.settings import MaturinBuildSettings, MaturinDevelopSettings, MaturinSettings
+from maturin_import_hook.settings import MaturinSettings
 
 from .common import (
     TEST_CRATES_DIR,
@@ -42,12 +41,8 @@ def test_maturin_unchanged() -> None:
 
 
 def test_settings() -> None:
-    assert MaturinSettings().to_args() == []
-    assert MaturinSettings().supported_commands() == {"build", "develop"}
-    assert MaturinBuildSettings().to_args() == []
-    assert MaturinBuildSettings().supported_commands() == {"build"}
-    assert MaturinDevelopSettings().to_args() == []
-    assert MaturinDevelopSettings().supported_commands() == {"develop"}
+    assert MaturinSettings().to_args("develop") == []
+    assert MaturinSettings().to_args("build") == []
 
     settings = MaturinSettings(
         release=True,
@@ -67,10 +62,10 @@ def test_settings() -> None:
         config={"key1": "value1", "key2": "value2"},
         unstable_flags=["unstable1", "unstable2"],
         verbose=2,
-        rustc_flags=["flag1", "flag2"],
+        rustc_flags=["flag1", "--flag2"],
     )
     # fmt: off
-    assert settings.to_args() == [
+    expected_args = [
         "--release",
         "--strip",
         "--quiet",
@@ -90,47 +85,72 @@ def test_settings() -> None:
         "-Z", "unstable1",
         "-Z", "unstable2",
         "-vv",
+        "--",
         "flag1",
-        "flag2",
+        "--flag2",
     ]
     # fmt: on
+    assert settings.to_args("develop") == expected_args
+    assert settings.to_args("build") == expected_args
 
-    build_settings = MaturinBuildSettings(auditwheel="skip", zig=True, color=False, rustc_flags=["flag1", "flag2"])
-    assert build_settings.to_args() == [
+    assert MaturinSettings.from_args(expected_args) == settings
+
+    build_settings = MaturinSettings(auditwheel="skip", zig=True)
+    expected_args = [
         "--auditwheel",
         "skip",
         "--zig",
-        "--color",
-        "never",
-        "flag1",
-        "flag2",
     ]
+    assert build_settings.to_args("build") == expected_args
+    assert build_settings.to_args("develop") == []
+    assert MaturinSettings.from_args(expected_args) == build_settings
 
-    develop_settings = MaturinDevelopSettings(
+    develop_settings = MaturinSettings(
         extras=["extra1", "extra2"],
         skip_install=True,
-        color=False,
-        rustc_flags=["flag1", "flag2"],
     )
-    assert develop_settings.to_args() == [
+    expected_args = [
         "--extras",
         "extra1,extra2",
         "--skip-install",
+    ]
+    assert develop_settings.to_args("develop") == expected_args
+    assert develop_settings.to_args("build") == []
+    assert MaturinSettings.from_args(expected_args) == develop_settings
+
+    mixed_settings = MaturinSettings(
+        color=True,
+        extras=["extra1", "extra2"],
+        skip_install=True,
+        zig=True,
+        rustc_flags=["flag1", "--flag2"],
+    )
+    assert mixed_settings.to_args("develop") == [
         "--color",
-        "never",
+        "always",
+        "--extras",
+        "extra1,extra2",
+        "--skip-install",
+        "--",
         "flag1",
-        "flag2",
+        "--flag2",
+    ]
+    assert mixed_settings.to_args("build") == [
+        "--color",
+        "always",
+        "--zig",
+        "--",
+        "flag1",
+        "--flag2",
     ]
 
 
 class TestGetInstallationFreshness:
     def _build_status(self, mtime: float) -> BuildStatus:
-        return BuildStatus(build_mtime=mtime, source_path=cast(Path, None), maturin_args=[], maturin_output="")
+        return BuildStatus(build_mtime=mtime, source_path=Path("/"), maturin_args=[], maturin_output="")
 
     def _build_status_for_file(self, path: Path) -> BuildStatus:
-        return BuildStatus(
-            build_mtime=path.stat().st_mtime, source_path=cast(Path, None), maturin_args=[], maturin_output=""
-        )
+        return BuildStatus(build_mtime=path.stat().st_mtime, source_path=Path("/"), maturin_args=[], maturin_output="")
 
     def test_missing_installation(self, tmp_path: Path) -> None:
         (tmp_path / "source").touch()

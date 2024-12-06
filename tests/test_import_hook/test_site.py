@@ -24,10 +24,24 @@ def test_automatic_site_installation(tmp_path: Path) -> None:
 
     assert not has_automatic_installation(sitecustomize)
 
-    insert_automatic_installation(sitecustomize, preset_name="debug", force=False)
+    insert_automatic_installation(
+        sitecustomize,
+        force=False,
+        args=None,
+        enable_project_importer=True,
+        enable_rs_file_importer=True,
+        detect_uv=False,
+    )
 
     with capture_logs() as cap:
-        insert_automatic_installation(sitecustomize, preset_name="debug", force=False)
+        insert_automatic_installation(
+            sitecustomize,
+            force=False,
+            args=None,
+            enable_project_importer=True,
+            enable_rs_file_importer=True,
+            detect_uv=False,
+        )
         logs = cap.getvalue()
     assert "already installed. Aborting install" in logs
 
@@ -37,14 +51,21 @@ def test_automatic_site_installation(tmp_path: Path) -> None:
     install()  # another import hook
 
     # <maturin_import_hook>
-    # the following commands install the maturin import hook during startup.
+    # the following installs the maturin import hook during startup.
     # see: `python -m maturin_import_hook site`
     try:
         import maturin_import_hook
+        from maturin_import_hook.settings import MaturinSettings
     except ImportError:
         pass
     else:
-        maturin_import_hook.install()
+        maturin_import_hook.install(
+            settings=MaturinSettings(
+                color=True
+            ),
+            enable_project_importer=True,
+            enable_rs_file_importer=True,
+        )
     # </maturin_import_hook>
     """)
 
@@ -84,12 +105,26 @@ def test_automatic_site_installation_force_overwrite(tmp_path: Path) -> None:
 
     sitecustomize.write_text(header)
 
-    insert_automatic_installation(sitecustomize, preset_name="debug", force=False)
+    insert_automatic_installation(
+        sitecustomize,
+        force=False,
+        args=None,
+        enable_project_importer=True,
+        enable_rs_file_importer=True,
+        detect_uv=False,
+    )
 
     sitecustomize.write_text(sitecustomize.read_text() + "\n\n# more code")
 
     with capture_logs() as cap:
-        insert_automatic_installation(sitecustomize, preset_name="release", force=True)
+        insert_automatic_installation(
+            sitecustomize,
+            force=True,
+            args="--release",
+            enable_project_importer=True,
+            enable_rs_file_importer=True,
+            detect_uv=False,
+        )
         logs = cap.getvalue()
     assert "already installed, but force=True. Overwriting..." in logs
 
@@ -102,7 +137,7 @@ def test_automatic_site_installation_force_overwrite(tmp_path: Path) -> None:
 
     # more code
     # <maturin_import_hook>
-    # the following commands install the maturin import hook during startup.
+    # the following installs the maturin import hook during startup.
     # see: `python -m maturin_import_hook site`
     try:
         import maturin_import_hook
@@ -110,7 +145,14 @@ def test_automatic_site_installation_force_overwrite(tmp_path: Path) -> None:
     except ImportError:
         pass
     else:
-        maturin_import_hook.install(MaturinSettings(release=True))
+        maturin_import_hook.install(
+            settings=MaturinSettings(
+                release=True,
+                color=True
+            ),
+            enable_project_importer=True,
+            enable_rs_file_importer=True,
+        )
     # </maturin_import_hook>
     """)
 
@@ -118,27 +160,48 @@ def test_automatic_site_installation_force_overwrite(tmp_path: Path) -> None:
     assert has_automatic_installation(sitecustomize)
 
 
-def test_automatic_site_installation_invalid_preset(tmp_path: Path) -> None:
+def test_automatic_site_installation_invalid_args(tmp_path: Path) -> None:
     sitecustomize = tmp_path / "sitecustomize.py"
-    with pytest.raises(ValueError, match="Unknown managed installation preset name: 'foo'"):
-        insert_automatic_installation(sitecustomize, preset_name="foo", force=False)
+    with pytest.raises(ValueError, match="argument parser error"):
+        insert_automatic_installation(
+            sitecustomize,
+            force=False,
+            args="--foo",
+            enable_project_importer=True,
+            enable_rs_file_importer=True,
+            detect_uv=False,
+        )
     assert not sitecustomize.exists()
 
 
 def test_automatic_site_installation_empty(tmp_path: Path) -> None:
     sitecustomize = tmp_path / "sitecustomize.py"
-    insert_automatic_installation(sitecustomize, preset_name="debug", force=False)
+    insert_automatic_installation(
+        sitecustomize,
+        force=False,
+        args=None,
+        enable_project_importer=True,
+        enable_rs_file_importer=True,
+        detect_uv=False,
+    )
 
     expected_code = dedent("""\
     # <maturin_import_hook>
-    # the following commands install the maturin import hook during startup.
+    # the following installs the maturin import hook during startup.
     # see: `python -m maturin_import_hook site`
     try:
         import maturin_import_hook
+        from maturin_import_hook.settings import MaturinSettings
     except ImportError:
         pass
     else:
-        maturin_import_hook.install()
+        maturin_import_hook.install(
+            settings=MaturinSettings(
+                color=True
+            ),
+            enable_project_importer=True,
+            enable_rs_file_importer=True,
+        )
     # </maturin_import_hook>
     """)
 

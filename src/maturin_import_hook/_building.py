@@ -149,9 +149,6 @@ def build_wheel(
     output_dir: Path,
     settings: MaturinSettings,
 ) -> str:
-    if "build" not in settings.supported_commands():
-        msg = f'provided {type(settings).__name__} does not support the "build" command'
-        raise ImportHookError(msg)
     success, output = run_maturin(
         maturin_path,
         [
@@ -162,7 +159,7 @@ def build_wheel(
             sys.executable,
             "--out",
             str(output_dir),
-            *settings.to_args(),
+            *settings.to_args("build"),
         ],
     )
     if not success:
@@ -176,10 +173,9 @@ def develop_build_project(
     manifest_path: Path,
     settings: MaturinSettings,
 ) -> str:
-    if "develop" not in settings.supported_commands():
-        msg = f'provided {type(settings).__name__} does not support the "develop" command'
-        raise ImportHookError(msg)
-    success, output = run_maturin(maturin_path, ["develop", "--manifest-path", str(manifest_path), *settings.to_args()])
+    success, output = run_maturin(
+        maturin_path, ["develop", "--manifest-path", str(manifest_path), *settings.to_args("develop")]
+    )
     if not success:
         msg = "Failed to build package with maturin"
         raise MaturinError(msg)
