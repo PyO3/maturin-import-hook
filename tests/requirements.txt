@@ -1,7 +1,6 @@
 -e ..
 uv
-#maturin==1.7.6
-maturin @ git+https://github.com/PyO3/maturin@5708c789ea0cf1a81e6ee2844c7a6a1fc54ecfec
+maturin==1.7.8
 pytest
 junit2html
 uniffi-bindgen==0.28.0
