@@ -29,15 +29,20 @@ from .common import (
 log = logging.getLogger(__name__)
 
 
+@pytest.mark.skipif(os.linesep != "\n", reason="hashes calculated with \\n line endings")
 def test_maturin_unchanged() -> None:
     """if new options have been added to maturin then the import hook needs to be updated to match"""
     env = {"PATH": os.environ["PATH"], "COLUMNS": "120"}
 
     build_help = subprocess.check_output("stty rows 50 cols 120; maturin build --help", shell=True, env=env)  # noqa: S602
-    assert hashlib.sha1(build_help).hexdigest() == "ea47a884c90c9376047687aed98ab1dca29b433a"
+    assert hashlib.sha1(build_help).hexdigest() == "ea47a884c90c9376047687aed98ab1dca29b433a", (
+        f"hashes don't match. build_help = {build_help!r}"
+    )
 
     develop_help = subprocess.check_output("stty rows 50 cols 120; maturin develop --help", shell=True, env=env)  # noqa: S602
-    assert hashlib.sha1(develop_help).hexdigest() == "ad7036a829c6801224933d589b1f9848678c9458"
+    assert hashlib.sha1(develop_help).hexdigest() == "ad7036a829c6801224933d589b1f9848678c9458", (
+        f"hashes don't match. develop_help = {develop_help!r}"
+    )
 
 
 def test_settings() -> None:
