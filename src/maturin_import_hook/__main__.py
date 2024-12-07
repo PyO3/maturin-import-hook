@@ -6,6 +6,7 @@ import shutil
 import site
 import subprocess
 from pathlib import Path
+from typing import Optional
 
 from maturin_import_hook._building import get_default_build_dir
 from maturin_import_hook._site import (
@@ -98,9 +99,17 @@ def _action_site_info(format_name: str) -> None:
     )
 
 
-def _action_site_install(*, user: bool, preset_name: str, force: bool) -> None:
+def _action_site_install(
+    *,
+    user: bool,
+    force: bool,
+    args: Optional[str],
+    enable_project_importer: bool,
+    enable_rs_file_importer: bool,
+    detect_uv: bool,
+) -> None:
     module_path = get_usercustomize_path() if user else get_sitecustomize_path()
-    insert_automatic_installation(module_path, preset_name, force)
+    insert_automatic_installation(module_path, force, args, enable_project_importer, enable_rs_file_importer, detect_uv)
 
 
 def _action_site_uninstall(*, user: bool) -> None:
@@ -183,10 +192,26 @@ def _main() -> None:
         help="whether to overwrite any existing managed import hook installation",
     )
     install.add_argument(
-        "--preset",
-        default="debug",
-        choices=["debug", "release"],
-        help="the settings preset for the import hook to use when building packages. Defaults to 'debug'.",
+        "--project-importer",
+        default=True,
+        help="Whether to enable the project importer",
+        action=argparse.BooleanOptionalAction,
+    )
+    install.add_argument(
+        "--rs-file-importer",
+        default=True,
+        help="Whether to enable the rs file importer",
+        action=argparse.BooleanOptionalAction,
+    )
+    install.add_argument(
+        "--detect-uv",
+        default=True,
+        help="Whether to automatically detect and use the --uv flag",
+        action=argparse.BooleanOptionalAction,
+    )
+    install.add_argument(
+        "--args",
+        help="The arguments to pass to `maturin`. See `maturin develop --help` or `maturin build --help`",
     )
     install.add_argument(
         "--user",
@@ -226,7 +251,14 @@ def _main() -> None:
         if args.sub_action == "info":
             _action_site_info(args.format)
         elif args.sub_action == "install":
-            _action_site_install(user=args.user, preset_name=args.preset, force=args.force)
+            _action_site_install(
+                user=args.user,
+                force=args.force,
+                args=args.args,
+                enable_project_importer=args.project_importer,
+                enable_rs_file_importer=args.rs_file_importer,
+                detect_uv=args.detect_uv,
+            )
         elif args.sub_action == "uninstall":
             _action_site_uninstall(user=args.user)
         else:
