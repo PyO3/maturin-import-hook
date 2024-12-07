@@ -9,26 +9,25 @@ from typing import Optional
 from maturin_import_hook._logging import logger
 from maturin_import_hook.settings import MaturinSettings
 
-MANAGED_INSTALL_START = "# <maturin_import_hook>"
+MANAGED_INSTALL_START = "# <maturin_import_hook>\n"
 MANAGED_INSTALL_END = "# </maturin_import_hook>\n"
-MANAGED_INSTALL_COMMENT = """
+MANAGED_INSTALL_TEMPLATE = """\
 # the following installs the maturin import hook during startup.
 # see: `python -m maturin_import_hook site`
-"""
-
-INSTALL_TEMPLATE = """\
 try:
     import maturin_import_hook
     from maturin_import_hook.settings import MaturinSettings
-except ImportError:
-    pass
-else:
     maturin_import_hook.install(
         settings=MaturinSettings(
             {settings}
         ),
         enable_project_importer={enable_project_importer},
         enable_rs_file_importer={enable_rs_file_importer},
+    )
+except Exception as e:
+    raise RuntimeError(
+        f"{{e}}\\n>> ERROR in managed maturin_import_hook installation. "
+        "Remove with `{uninstall_command}`\\n",
     )
 """
 
@@ -104,6 +103,7 @@ def _should_use_uv() -> bool:
 
 def insert_automatic_installation(
     module_path: Path,
+    uninstall_command: str,
     force: bool,
     args: Optional[str],
     enable_project_importer: bool,
@@ -142,11 +142,11 @@ def insert_automatic_installation(
 
     parts.extend([
         MANAGED_INSTALL_START,
-        MANAGED_INSTALL_COMMENT,
-        INSTALL_TEMPLATE.format(
+        MANAGED_INSTALL_TEMPLATE.format(
             settings=",\n            ".join(f"{k}={v!r}" for k, v in non_default_settings.items()),
             enable_project_importer=repr(enable_project_importer),
             enable_rs_file_importer=repr(enable_rs_file_importer),
+            uninstall_command=uninstall_command,
         ),
         MANAGED_INSTALL_END,
     ])
