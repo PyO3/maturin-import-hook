@@ -104,7 +104,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
         return self._maturin_path
 
     def invalidate_caches(self) -> None:
-        """called by importlib.invalidate_caches()"""
+        """called by `importlib.invalidate_caches()`"""
         logger.info("clearing cache")
         self._resolver.clear_cache()
         _find_maturin_project_above.cache_clear()
@@ -172,6 +172,8 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
                 logger.info('rebuilt and loaded package "%s" in %.3fs', package_name, duration)
             else:
                 logger.debug('loaded package "%s" in %.3fs', package_name, duration)
+        elif logger.isEnabledFor(logging.DEBUG):
+            logger.debug('%s did not find "%s"', type(self).__name__, package_name)
         return spec
 
     def _handle_reload(self, package_name: str, spec: ModuleSpec) -> ModuleSpec:

@@ -191,10 +191,12 @@ def _main() -> None:
     install.add_argument(
         "--user",
         action="store_true",
-        help="whether to install into usercustomize.py instead of sitecustomize.py. "
-        "Note that usercustomize.py is shared between virtualenvs of the same interpreter version and is not loaded "
-        "unless the virtualenv is created with the `--system-site-packages` argument. Use `site info` to check "
-        "whether usercustomize.py is loaded the current interpreter.",
+        help=(
+            "whether to install into usercustomize.py instead of sitecustomize.py. "
+            "Note that usercustomize.py is shared between virtualenvs of the same interpreter version and is "
+            "not loaded unless the virtualenv is created with the `--system-site-packages` argument. "
+            "Use `site info` to check whether usercustomize.py is loaded the current interpreter."
+        ),
     )
 
     uninstall = site_sub_actions.add_parser(

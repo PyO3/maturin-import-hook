@@ -60,7 +60,7 @@ class _TomlFile:
 
 def find_cargo_manifest(project_dir: Path) -> Optional[Path]:
     pyproject_path = project_dir / "pyproject.toml"
-    if pyproject_path.exists():
+    if pyproject_path.is_file():
         pyproject_data = pyproject_path.read_text()
         if "manifest-path" in pyproject_data:
             pyproject = _TomlFile.from_string(pyproject_path, pyproject_data)
@@ -69,17 +69,17 @@ def find_cargo_manifest(project_dir: Path) -> Optional[Path]:
                 return project_dir / relative_manifest_path
 
     manifest_path = project_dir / "Cargo.toml"
-    if manifest_path.exists():
+    if manifest_path.is_file():
         return manifest_path
     manifest_path = project_dir / "rust/Cargo.toml"
-    if manifest_path.exists():
+    if manifest_path.is_file():
         return manifest_path
     return None
 
 
-def is_maybe_maturin_project(project_dir: Path) -> bool:
+def is_maybe_maturin_project(directory: Path) -> bool:
     """note: this function does not check if this really is a maturin project for simplicity."""
-    return (project_dir / "pyproject.toml").exists() and find_cargo_manifest(project_dir) is not None
+    return (directory / "pyproject.toml").is_file() and find_cargo_manifest(directory) is not None
 
 
 class ProjectResolver:
@@ -142,7 +142,7 @@ class MaturinProject:
 def _find_all_path_dependencies(immediate_path_dependencies: list[Path]) -> list[Path]:
     if not immediate_path_dependencies:
         return []
-    all_path_dependencies = set()
+    all_path_dependencies: set[Path] = set()
     to_search = immediate_path_dependencies.copy()
     while to_search:
         dependency_project_dir = to_search.pop()
@@ -170,6 +170,9 @@ def _resolve_project(project_dir: Path) -> MaturinProject:
         msg = "no pyproject.toml found"
         raise _ProjectResolveError(msg)
     pyproject = _TomlFile.load(pyproject_path)
+    if not _is_valid_pyproject(pyproject):
+        msg = "pyproject.toml is invalid (does not have required fields)"
+        raise _ProjectResolveError(msg)
 
     manifest_path = find_cargo_manifest(project_dir)
     if manifest_path is None:
@@ -201,6 +204,13 @@ def _resolve_project(project_dir: Path) -> MaturinProject:
         extension_module_dir=extension_module_dir,
         immediate_path_dependencies=immediate_path_dependencies,
     )
+
+
+def _is_valid_pyproject(pyproject: _TomlFile) -> bool:
+    """in maturin serde is used to load into a `PyProjectToml` struct.
+    This function should match whether the toml would parse correctly"""
+    # it should be sufficient to check the required fields rather than match the serde parsing logic exactly
+    return pyproject.get_value(["build-system", "requires"], list) is not None
 
 
 def _resolve_rust_module(python_dir: Path, module_name: str) -> tuple[Path, Path, str]:
@@ -244,11 +254,11 @@ def _resolve_module_name(pyproject: _TomlFile, cargo: _TomlFile) -> Optional[str
 
 
 def _get_immediate_path_dependencies(manifest_dir_path: Path, cargo: _TomlFile) -> list[Path]:
-    path_dependencies = []
+    path_dependencies: list[Path] = []
     for dependency in cargo.get_value_or_default(["dependencies"], dict, {}).values():
         if isinstance(dependency, dict):
-            relative_path = dependency.get("path", None)
-            if relative_path is not None:
+            relative_path: Any = dependency.get("path", None)
+            if relative_path is not None and isinstance(relative_path, str):
                 path_dependencies.append((manifest_dir_path / relative_path).resolve())
     return path_dependencies
 

@@ -1,5 +1,5 @@
 {
-  "commit": "894231c644c2d7a9a31349c86b3f3c431b74d615",
+  "commit": "e403fdf811d0ccae12001586adc160e977d47c16",
   "crates": {
     "cffi-mixed": {
       "cargo_manifest_path": "Cargo.toml",
@@ -155,6 +155,7 @@
       "python_dir": ".",
       "python_module": null
     },
+    "workspace-inverted-order": null,
     "wrong-python-source": {
       "cargo_manifest_path": "Cargo.toml",
       "extension_module_dir": null,

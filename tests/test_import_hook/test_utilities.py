@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import cast
 
 import pytest
+
 from maturin_import_hook._building import BuildCache, BuildStatus, Freshness, get_installation_freshness
 from maturin_import_hook._resolve_project import _ProjectResolveError, _resolve_project, _TomlFile
 from maturin_import_hook.error import ImportHookError
@@ -34,7 +35,7 @@ def test_maturin_unchanged() -> None:
     env = {"PATH": os.environ["PATH"], "COLUMNS": "120"}
 
     build_help = subprocess.check_output("stty rows 50 cols 120; maturin build --help", shell=True, env=env)  # noqa: S602
-    assert hashlib.sha1(build_help).hexdigest() == "99f80713607f23c53a0a936c36789c7c4186d5a9"
+    assert hashlib.sha1(build_help).hexdigest() == "ea47a884c90c9376047687aed98ab1dca29b433a"
 
     develop_help = subprocess.check_output("stty rows 50 cols 120; maturin develop --help", shell=True, env=env)  # noqa: S602
     assert hashlib.sha1(develop_help).hexdigest() == "ad7036a829c6801224933d589b1f9848678c9458"
@@ -94,9 +95,10 @@ def test_settings() -> None:
     ]
     # fmt: on
 
-    build_settings = MaturinBuildSettings(skip_auditwheel=True, zig=True, color=False, rustc_flags=["flag1", "flag2"])
+    build_settings = MaturinBuildSettings(auditwheel="skip", zig=True, color=False, rustc_flags=["flag1", "flag2"])
     assert build_settings.to_args() == [
-        "--skip-auditwheel",
+        "--auditwheel",
+        "skip",
         "--zig",
         "--color",
         "never",
@@ -221,8 +223,7 @@ class TestGetInstallationFreshness:
         assert freshness == Freshness(False, "failed to read installed files", None, None)
 
         expected_error = re.escape(
-            "error reading source file mtimes: "
-            f"PermissionError(13, 'Permission denied') ({unreadable_dir / 'source'})"
+            f"error reading source file mtimes: PermissionError(13, 'Permission denied') ({unreadable_dir / 'source'})"
         )
         with pytest.raises(ImportHookError, match=expected_error):
             get_installation_freshness([unreadable_dir / "source"], [readable_dir / "install"], readable_status)

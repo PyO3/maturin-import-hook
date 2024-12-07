@@ -31,6 +31,7 @@ IGNORED_TEST_CRATES = {
     "hello-world",  # not imported as a python module (subprocess only)
     "license-test",  # not imported as a python module (subprocess only)
     "pyo3-bin",  # not imported as a python module (subprocess only)
+    "workspace-inverted-order",  # this directory is not a maturin package, only the subdirectory
 }
 
 
@@ -87,9 +88,9 @@ def resolved_packages() -> dict[str, Optional[ResolvedPackage]]:
         assert git_path is not None
         cmd = [git_path, "rev-parse", "HEAD"]
         current_commit_hash = subprocess.check_output(cmd, cwd=MATURIN_DIR).decode().strip()
-        assert (
-            current_commit_hash == commit_hash
-        ), "the maturin submodule is not in sync with resolved.json. See package_resolver/README.md for details"
+        assert current_commit_hash == commit_hash, (
+            "the maturin submodule is not in sync with resolved.json. See package_resolver/README.md for details"
+        )
 
         _RESOLVED_PACKAGES = {
             crate_name: None if crate_data is None else ResolvedPackage.from_dict(crate_data)

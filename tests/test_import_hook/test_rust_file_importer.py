@@ -614,7 +614,7 @@ class TestLogging:
         return rs_path, py_path
 
     def test_maturin_detection(self, workspace: Path) -> None:
-        rs_path, py_path = self._create_clean_package(workspace / "package")
+        _rs_path, py_path = self._create_clean_package(workspace / "package")
 
         env = os.environ.copy()
         env["PATH"] = remove_executable_from_path(env["PATH"], "maturin")
@@ -639,7 +639,7 @@ class TestLogging:
         """By default, when a module is out of date the import hook logs messages
         before and after rebuilding but hides the underlying details.
         """
-        rs_path, py_path = self._create_clean_package(workspace / "package")
+        _rs_path, py_path = self._create_clean_package(workspace / "package")
 
         output, _ = run_python([str(py_path)], workspace)
         pattern = 'building "my_script"\nrebuilt and loaded module "my_script" in [0-9.]+s\nget_num 10\nSUCCESS\n'
@@ -647,7 +647,7 @@ class TestLogging:
 
     def test_default_up_to_date(self, workspace: Path) -> None:
         """By default, when the module is up-to-date nothing is printed."""
-        rs_path, py_path = self._create_clean_package(workspace / "package")
+        _rs_path, py_path = self._create_clean_package(workspace / "package")
 
         run_python([str(py_path)], workspace)  # run once to rebuild
 
@@ -709,7 +709,7 @@ class TestLogging:
 
     @pytest.mark.skipif(not RELOAD_SUPPORTED, reason="reload not supported")
     def test_reload(self, workspace: Path) -> None:
-        rs_path, py_path = self._create_clean_package(workspace / "package", reload_helper=True)
+        _rs_path, py_path = self._create_clean_package(workspace / "package", reload_helper=True)
 
         output1, _ = run_python([str(py_path)], workspace)
         output1 = remove_ansii_escape_characters(output1)
@@ -733,7 +733,7 @@ class TestLogging:
         """If reset_logger is called then by default logging level INFO is not printed
         (because the messages are handled by the root logger).
         """
-        rs_path, py_path = self._create_clean_package(workspace / "package")
+        _rs_path, py_path = self._create_clean_package(workspace / "package")
         output, _ = run_python([str(py_path), "RESET_LOGGER"], workspace)
         assert output == "get_num 10\nSUCCESS\n"
 

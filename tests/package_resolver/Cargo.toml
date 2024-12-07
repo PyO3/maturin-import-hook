@@ -5,7 +5,7 @@ edition = "2021"
 publish = false
 
 [dependencies]
-anyhow = "1.0.79"
+anyhow = "1.0.93"
 maturin = { path = "../maturin" }
 serde = { version = "1.0.195", features = ["derive"] }
-serde_json = "1.0.111"
+serde_json = "1.0.133"

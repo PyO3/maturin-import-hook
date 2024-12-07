@@ -32,7 +32,7 @@ fn resolve_package(project_root: &Path) -> Result<Value> {
     let _cwd = TemporaryChdir::chdir(&project_root)?;
 
     let build_options: BuildOptions = Default::default();
-    let build_context = build_options.into_build_context(false, false, false)?;
+    let build_context = build_options.into_build_context().build()?;
     let extension_module_dir = if build_context.project_layout.python_module.is_some() {
         Some(relative_path(
             &build_context.project_layout.rust_module,
@@ -74,7 +74,16 @@ fn resolve_all_packages(test_crates_dir: &Path) -> Result<Value> {
     for path in entries {
         if path.join("pyproject.toml").exists() {
             let project_name = path.file_name().unwrap().to_str().unwrap().to_owned();
-            resolved_packages.insert(project_name, resolve_package(&path).unwrap_or(Value::Null));
+            println!("resolve '{}'", project_name);
+            match resolve_package(&path) {
+                Ok(value) => {
+                    resolved_packages.insert(project_name, value);
+                }
+                Err(err) => {
+                    println!("resolve failed with: {:?}", err);
+                    resolved_packages.insert(project_name, Value::Null);
+                }
+            }
         }
     }
     Ok(Value::Object(resolved_packages))

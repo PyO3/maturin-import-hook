@@ -33,12 +33,27 @@ To update maturin:
 
 - update the submodule to the maturin commit you want to update to
 - re-run the `package_resolver` to update `resolved.json` (see `package_resolver/README.md` for instructions)
-- update `requirements.txt` to match the packages and versions used by the maturin ci (`.github/workflows.test.yml`)
+- update `requirements.txt` to match the packages and versions installed by the maturin ci
+  (see `pip` and `uv` commands in `maturin/.github/workflows/test.yml`)
     - check the `uniffi` package version listed in the `Cargo.toml` of any of the `uniffi-*`
       test crates and update `uniffi-bindgen` in `requirements.txt` to match.
 - check that no crates have been added to `test-crates` that should be excluded from the import hook tests.
   If so, add them to `IGNORED_TEST_CRATES` in `common.py`
+- upgrade the test packages in `test_import_hook/*_helpers`
+    - check what version of `pyo3` is used by the command: `maturin new --bindings pyo3`
 - update the version check in the import hook to ensure it allows using the new version
+- run the tests to ensure everything still works
+
+Released versions of the import hook should use a tagged version of maturin, but during development, in order
+to use a specific maturin commit:
+
+- use `maturin @ git+https://github.com/PyO3/maturin@xxxxxxx` in `requirements.txt`
+    - where `xxxxxxx` is a git commit hash
+- `export MATURIN_SETUP_ARGS="--features=scaffolding"` before running `runner.py`
+    - the `setup.py` of `maturin` uses this environment variable when building from source. the `scaffolding` feature
+    is required for `maturin new`.
+    - Make sure a cached built version of this commit is not available because `uv` doesn't know about the
+    environment variable. run `uv cache clean maturin` to remove any cached versions.
 
 ## Notes
 
