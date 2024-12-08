@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
+from maturin_import_hook import project_importer, rust_file_importer
 from maturin_import_hook._building import get_default_build_dir
 from maturin_import_hook._site import (
     get_sitecustomize_path,
@@ -94,6 +95,8 @@ def _action_site_info(format_name: str) -> None:
             "usercustomize_path": str(usercustomize_path),
             "usercustomize_exists": usercustomize_path.exists(),
             "usercustomize_import_hook_installed": has_automatic_installation(usercustomize_path),
+            "project_importer_installed": project_importer.is_installed(),
+            "rust_file_importer_installed": rust_file_importer.is_installed(),
         },
         format_name,
     )
@@ -108,8 +111,21 @@ def _action_site_install(
     enable_rs_file_importer: bool,
     detect_uv: bool,
 ) -> None:
-    module_path = get_usercustomize_path() if user else get_sitecustomize_path()
-    insert_automatic_installation(module_path, force, args, enable_project_importer, enable_rs_file_importer, detect_uv)
+    if user:
+        module_path = get_usercustomize_path()
+        uninstall_command = "python -m maturin_import_hook site uninstall --user"
+    else:
+        module_path = get_sitecustomize_path()
+        uninstall_command = "python -m maturin_import_hook site uninstall"
+    insert_automatic_installation(
+        module_path,
+        uninstall_command,
+        force,
+        args,
+        enable_project_importer,
+        enable_rs_file_importer,
+        detect_uv,
+    )
 
 
 def _action_site_uninstall(*, user: bool) -> None:

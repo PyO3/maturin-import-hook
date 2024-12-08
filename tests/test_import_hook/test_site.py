@@ -26,6 +26,7 @@ def test_automatic_site_installation(tmp_path: Path) -> None:
 
     insert_automatic_installation(
         sitecustomize,
+        "<uninstall>",
         force=False,
         args=None,
         enable_project_importer=True,
@@ -36,6 +37,7 @@ def test_automatic_site_installation(tmp_path: Path) -> None:
     with capture_logs() as cap:
         insert_automatic_installation(
             sitecustomize,
+            "<uninstall>",
             force=False,
             args=None,
             enable_project_importer=True,
@@ -56,15 +58,17 @@ def test_automatic_site_installation(tmp_path: Path) -> None:
     try:
         import maturin_import_hook
         from maturin_import_hook.settings import MaturinSettings
-    except ImportError:
-        pass
-    else:
         maturin_import_hook.install(
             settings=MaturinSettings(
                 color=True
             ),
             enable_project_importer=True,
             enable_rs_file_importer=True,
+        )
+    except Exception as e:
+        raise RuntimeError(
+            f"{e}\\n>> ERROR in managed maturin_import_hook installation. "
+            "Remove with `<uninstall>`\\n",
         )
     # </maturin_import_hook>
     """)
@@ -107,6 +111,7 @@ def test_automatic_site_installation_force_overwrite(tmp_path: Path) -> None:
 
     insert_automatic_installation(
         sitecustomize,
+        "<uninstall>",
         force=False,
         args=None,
         enable_project_importer=True,
@@ -119,6 +124,7 @@ def test_automatic_site_installation_force_overwrite(tmp_path: Path) -> None:
     with capture_logs() as cap:
         insert_automatic_installation(
             sitecustomize,
+            "<uninstall>",
             force=True,
             args="--release",
             enable_project_importer=True,
@@ -142,9 +148,6 @@ def test_automatic_site_installation_force_overwrite(tmp_path: Path) -> None:
     try:
         import maturin_import_hook
         from maturin_import_hook.settings import MaturinSettings
-    except ImportError:
-        pass
-    else:
         maturin_import_hook.install(
             settings=MaturinSettings(
                 release=True,
@@ -152,6 +155,11 @@ def test_automatic_site_installation_force_overwrite(tmp_path: Path) -> None:
             ),
             enable_project_importer=True,
             enable_rs_file_importer=True,
+        )
+    except Exception as e:
+        raise RuntimeError(
+            f"{e}\\n>> ERROR in managed maturin_import_hook installation. "
+            "Remove with `<uninstall>`\\n",
         )
     # </maturin_import_hook>
     """)
@@ -165,6 +173,7 @@ def test_automatic_site_installation_invalid_args(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="argument parser error"):
         insert_automatic_installation(
             sitecustomize,
+            "<uninstall>",
             force=False,
             args="--foo",
             enable_project_importer=True,
@@ -178,6 +187,7 @@ def test_automatic_site_installation_empty(tmp_path: Path) -> None:
     sitecustomize = tmp_path / "sitecustomize.py"
     insert_automatic_installation(
         sitecustomize,
+        "<uninstall>",
         force=False,
         args=None,
         enable_project_importer=True,
@@ -192,15 +202,17 @@ def test_automatic_site_installation_empty(tmp_path: Path) -> None:
     try:
         import maturin_import_hook
         from maturin_import_hook.settings import MaturinSettings
-    except ImportError:
-        pass
-    else:
         maturin_import_hook.install(
             settings=MaturinSettings(
                 color=True
             ),
             enable_project_importer=True,
             enable_rs_file_importer=True,
+        )
+    except Exception as e:
+        raise RuntimeError(
+            f"{e}\\n>> ERROR in managed maturin_import_hook installation. "
+            "Remove with `<uninstall>`\\n",
         )
     # </maturin_import_hook>
     """)
