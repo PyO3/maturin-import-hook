@@ -50,5 +50,5 @@ a PR, but generally stick to conforming to the suggested linter rules.
 2. Update `Changelog.md` to reflect the new changes.
 3. Check out the commit you want to make a release from.
 4. Run `git tag <version>` e.g. `git tag v0.1.0`.
-5. Run `git push origin <version>` e.g. `git tag v0.1.0`.
+5. Run `git push origin <version>` e.g. `git push origin v0.1.0`.
     - This will trigger the 'release' github action which will upload to PyPi.
