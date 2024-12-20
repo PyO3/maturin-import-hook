@@ -191,10 +191,11 @@ def _resolve_project(project_dir: Path) -> MaturinProject:
     python_module, extension_module_dir, extension_module_name = _resolve_rust_module(python_dir, module_full_name)
     immediate_path_dependencies = _get_immediate_path_dependencies(manifest_path.parent, cargo)
 
+    package_name = ".".join(python_module.relative_to(python_dir).parts)
     if not python_module.exists():
         extension_module_dir = None
         python_module = None
-    package_name = ".".join(python_module.relative_to(python_dir).parts)
+        package_name = module_full_name.split(".")[0]
     return MaturinProject(
         cargo_manifest_path=manifest_path,
         module_full_name=module_full_name,
