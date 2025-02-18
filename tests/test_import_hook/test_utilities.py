@@ -342,6 +342,34 @@ def test_resolve_project(project_name: str) -> None:
     assert ground_truth == calculated
 
 
+def test_resolve_invalid_project(tmp_path: Path) -> None:
+    with pytest.raises(_ProjectResolveError, match="no pyproject.toml found"):
+        _resolve_project(tmp_path)
+
+    (tmp_path / "pyproject.toml").write_text("~not TOML~")
+    with pytest.raises(_ProjectResolveError, match="pyproject.toml failed to parse as TOML: .*"):
+        _resolve_project(tmp_path)
+
+    (tmp_path / "pyproject.toml").write_text("")
+    with pytest.raises(
+        _ProjectResolveError, match=re.escape("pyproject.toml is invalid (does not have required fields)")
+    ):
+        _resolve_project(tmp_path)
+
+    (tmp_path / "pyproject.toml").write_text("[build-system]\nrequires = []")
+
+    with pytest.raises(_ProjectResolveError, match="no Cargo.toml found"):
+        _resolve_project(tmp_path)
+
+    (tmp_path / "Cargo.toml").write_text("~not TOML~")
+    with pytest.raises(_ProjectResolveError, match="Cargo.toml failed to parse as TOML: .*"):
+        _resolve_project(tmp_path)
+
+    (tmp_path / "Cargo.toml").write_text("")
+    with pytest.raises(_ProjectResolveError, match="could not resolve module_full_name"):
+        _resolve_project(tmp_path)
+
+
 def test_build_cache(tmp_path: Path) -> None:
     cache = BuildCache(tmp_path / "build", lock_timeout_seconds=1)
 
