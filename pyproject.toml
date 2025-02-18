@@ -43,7 +43,6 @@ select = ["ALL"]
 
 # https://docs.astral.sh/ruff/rules/
 ignore = [
-    "ANN101",  # missing-type-self
     "ARG",     # flake8-unused-arguments
     "C901",    # complex-structure
     "COM",     # flake8-commas

@@ -184,7 +184,7 @@ class NonExitingArgumentParser(argparse.ArgumentParser):
     def exit(self, status: int = 0, message: Optional[str] = None) -> None:  # type: ignore[override]
         pass
 
-    def _print_message(self, message: str, file: Optional[IO[str]] = None) -> None:
+    def _print_message(self, message: str, file: Optional[IO[str]] = None) -> None:  # type: ignore[override]
         pass
 
 

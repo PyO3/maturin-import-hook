@@ -31,7 +31,7 @@ from maturin_import_hook._resolve_project import ProjectResolver, find_cargo_man
 from maturin_import_hook.error import ImportHookError
 from maturin_import_hook.settings import MaturinSettings
 
-__all__ = ["MaturinRustFileImporter", "install", "uninstall", "IMPORTER"]
+__all__ = ["IMPORTER", "MaturinRustFileImporter", "install", "uninstall"]
 
 
 class MaturinRustFileImporter(importlib.abc.MetaPathFinder):
