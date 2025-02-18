@@ -109,7 +109,6 @@ def _action_site_install(
     args: Optional[str],
     enable_project_importer: bool,
     enable_rs_file_importer: bool,
-    detect_uv: bool,
 ) -> None:
     if user:
         module_path = get_usercustomize_path()
@@ -124,7 +123,6 @@ def _action_site_install(
         args,
         enable_project_importer,
         enable_rs_file_importer,
-        detect_uv,
     )
 
 
@@ -220,12 +218,6 @@ def _main() -> None:
         action=argparse.BooleanOptionalAction,
     )
     install.add_argument(
-        "--detect-uv",
-        default=True,
-        help="Whether to automatically detect and use the --uv flag",
-        action=argparse.BooleanOptionalAction,
-    )
-    install.add_argument(
         "--args",
         help="The arguments to pass to `maturin`. See `maturin develop --help` or `maturin build --help`",
     )
@@ -273,7 +265,6 @@ def _main() -> None:
                 args=args.args,
                 enable_project_importer=args.project_importer,
                 enable_rs_file_importer=args.rs_file_importer,
-                detect_uv=args.detect_uv,
             )
         elif args.sub_action == "uninstall":
             _action_site_uninstall(user=args.user)

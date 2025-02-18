@@ -1,7 +1,5 @@
 import dataclasses
-import importlib
 import shlex
-import shutil
 import site
 from pathlib import Path
 from typing import Optional
@@ -83,24 +81,6 @@ def remove_automatic_installation(module_path: Path) -> None:
         module_path.unlink(missing_ok=True)
 
 
-def _should_use_uv() -> bool:
-    """Whether the `--uv` flag should be used when installing into this environment.
-
-    virtual environments managed with `uv` do not have `pip` installed so the `--uv` flag is required.
-    """
-    try:
-        importlib.import_module("pip")
-    except ModuleNotFoundError:
-        if shutil.which("uv") is not None:
-            return True
-        else:
-            logger.warning("neither `pip` nor `uv` were found. `maturin develop` may not work...")
-            return False
-    else:
-        # since pip is a more established program, use it even if uv may be installed
-        return False
-
-
 def insert_automatic_installation(
     module_path: Path,
     uninstall_command: str,
@@ -108,7 +88,6 @@ def insert_automatic_installation(
     args: Optional[str],
     enable_project_importer: bool,
     enable_rs_file_importer: bool,
-    detect_uv: bool,
 ) -> None:
     if args is None:
         parsed_args = MaturinSettings.default()
@@ -116,12 +95,6 @@ def insert_automatic_installation(
         parsed_args = MaturinSettings.from_args(shlex.split(args))
         if parsed_args.color is None:
             parsed_args.color = True
-    if detect_uv and not parsed_args.uv and _should_use_uv():
-        parsed_args.uv = True
-        logger.info(
-            "using `--uv` flag as it was detected to be necessary for this environment. "
-            "Use `site install --no-detect-uv` to set manually."
-        )
 
     logger.info(f"installing automatic activation into '{module_path}'")
     if has_automatic_installation(module_path):

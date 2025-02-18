@@ -34,6 +34,7 @@ class TestOptions:
     test_suite_name: str
     timeout: int
     max_failures: int | None
+    last_failed: bool
     package_installer: PackageInstaller
     use_lld: bool
     profile: Path | None
@@ -108,6 +109,8 @@ def _run_test_in_environment(
         cmd += ["--junit-xml", str(report_output.resolve()), "-o", f"junit_suite_name={options.test_suite_name}"]
     if options.max_failures is not None:
         cmd += ["--maxfail", str(options.max_failures)]
+    if options.last_failed:
+        cmd += ["--last-failed"]
     cmd += [options.test_specification]
     log.info("running %s", subprocess.list2cmdline(cmd))
     proc = subprocess.run(cmd, env=env, check=False, timeout=options.timeout)
@@ -342,6 +345,11 @@ def main() -> None:
         required=False,
         help="collect profiling statistics. Note that the majority of the time is spent waiting on subprocesses",
     )
+    parser.add_argument(
+        "--last-failed",
+        action="store_true",
+        help="re-run only the tests that failed in the last run",
+    )
 
     parser.add_argument(
         "test_specification", nargs="?", help="the directory, file or test to run (defaults to running all tests)"
@@ -356,6 +364,7 @@ def main() -> None:
         test_suite_name=args.name,
         timeout=args.timeout,
         max_failures=args.max_failures,
+        last_failed=args.last_failed,
         package_installer=args.installer,
         use_lld=args.lld,
         profile=args.profile,
