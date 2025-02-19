@@ -41,12 +41,12 @@ from maturin_import_hook.error import ImportHookError
 from maturin_import_hook.settings import MaturinSettings
 
 __all__ = [
+    "IMPORTER",
+    "DefaultProjectFileSearcher",
     "MaturinProjectImporter",
+    "ProjectFileSearcher",
     "install",
     "uninstall",
-    "IMPORTER",
-    "ProjectFileSearcher",
-    "DefaultProjectFileSearcher",
 ]
 
 

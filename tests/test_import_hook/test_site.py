@@ -31,7 +31,6 @@ def test_automatic_site_installation(tmp_path: Path) -> None:
         args=None,
         enable_project_importer=True,
         enable_rs_file_importer=True,
-        detect_uv=False,
     )
 
     with capture_logs() as cap:
@@ -42,7 +41,6 @@ def test_automatic_site_installation(tmp_path: Path) -> None:
             args=None,
             enable_project_importer=True,
             enable_rs_file_importer=True,
-            detect_uv=False,
         )
         logs = cap.getvalue()
     assert "already installed. Aborting install" in logs
@@ -116,7 +114,6 @@ def test_automatic_site_installation_force_overwrite(tmp_path: Path) -> None:
         args=None,
         enable_project_importer=True,
         enable_rs_file_importer=True,
-        detect_uv=False,
     )
 
     sitecustomize.write_text(sitecustomize.read_text() + "\n\n# more code")
@@ -129,7 +126,6 @@ def test_automatic_site_installation_force_overwrite(tmp_path: Path) -> None:
             args="--release",
             enable_project_importer=True,
             enable_rs_file_importer=True,
-            detect_uv=False,
         )
         logs = cap.getvalue()
     assert "already installed, but force=True. Overwriting..." in logs
@@ -178,7 +174,6 @@ def test_automatic_site_installation_invalid_args(tmp_path: Path) -> None:
             args="--foo",
             enable_project_importer=True,
             enable_rs_file_importer=True,
-            detect_uv=False,
         )
     assert not sitecustomize.exists()
 
@@ -192,7 +187,6 @@ def test_automatic_site_installation_empty(tmp_path: Path) -> None:
         args=None,
         enable_project_importer=True,
         enable_rs_file_importer=True,
-        detect_uv=False,
     )
 
     expected_code = dedent("""\
