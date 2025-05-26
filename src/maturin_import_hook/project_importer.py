@@ -162,7 +162,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
                         break
 
             project_dir = _find_maturin_project_above(search_path)
-            if project_dir is not None and (search_path / package_name / "__init__.py").exists():
+            if project_dir is not None:
                 logger.debug(
                     'found project above the search path: "%s" ("%s")',
                     project_dir,
@@ -362,6 +362,15 @@ def _find_spec_for_package(package_name: str) -> Optional[ModuleSpec]:
         if spec.submodule_search_locations and not isinstance(spec.submodule_search_locations, Sequence):
             current_path = spec.submodule_search_locations
         if isinstance(spec.submodule_search_locations, Sequence):
+            # Definitely a regular package at this point
+            # Unconditionally reset the name on the ModuleSpec to the package_name
+            # (recursing down through a namespace with a PathFinder ends up producing
+            # a ModuleSpec with just the terminal name)
+            spec.name = package_name
+            # Ensure the loader is synchronized with that too
+            assert spec.loader is not None
+            # Definitionally, this is *not* a namespace loader
+            spec.loader.name = package_name
             break
     if spec is not None:
         return spec
