@@ -1343,6 +1343,8 @@ def test_non_directory_in_search_path(tmp_path: Path) -> None:
     Normally, `sys.path` only contains directories.
     """
     installer = PackageInstaller.from_env()
+    _uninstall("foo")
+    _uninstall("bar")
 
     foo_project_dir = tmp_path / "foo"
     foo_project_dir.mkdir()
@@ -1353,7 +1355,7 @@ def test_non_directory_in_search_path(tmp_path: Path) -> None:
         version = "0.1.0"
         description = "Add your description here"
         authors = []
-        requires-python = ">=3.11"
+        requires-python = ">=3.0"
         dependencies = []
 
         [project.scripts]
@@ -1391,7 +1393,7 @@ def test_non_directory_in_search_path(tmp_path: Path) -> None:
         version = "0.1.0"
         description = "Add your description here"
         authors = []
-        requires-python = ">=3.11"
+        requires-python = ">=3.0"
         dependencies = []
 
         [build-system]
