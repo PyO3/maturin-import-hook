@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- raise minimum maturin to 1.8.4 [#22](https://github.com/PyO3/maturin-import-hook/pull/22)
 - update to maturin 1.8.2
     - remove `--detect-uv` argument to `maturin_import_hook site install` because maturin now automatically detects uv
     environments
