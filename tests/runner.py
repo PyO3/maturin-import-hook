@@ -41,6 +41,7 @@ class TestOptions:
     maturin_debug: bool
     html_report: bool
     notify: bool
+    clear_workspace: bool
 
 
 def _run_tests_serial(
@@ -52,6 +53,10 @@ def _run_tests_serial(
 
     workspace = workspace.resolve()
     python = python.resolve()
+    if workspace.exists() and options.clear_workspace:
+        print(f"the workspace directory already exists: '{workspace}'")
+        input("Press enter to clear it...")
+        shutil.rmtree(workspace)
     _create_ignored_directory(workspace)
 
     reports_dir = workspace / "reports"
@@ -335,7 +340,7 @@ def main() -> None:
         help="use lld for linking (generally faster than the default).",
     )
     parser.add_argument(
-        "--maturin_debug",
+        "--maturin-debug",
         action="store_true",
         help="have maturin produce verbose logs",
     )
@@ -349,6 +354,11 @@ def main() -> None:
         "--last-failed",
         action="store_true",
         help="re-run only the tests that failed in the last run",
+    )
+    parser.add_argument(
+        "--clear-workspace",
+        action="store_true",
+        help="re-create the workspace if it already exists",
     )
 
     parser.add_argument(
@@ -371,6 +381,7 @@ def main() -> None:
         maturin_debug=args.maturin_debug,
         html_report=args.html_report,
         notify=args.notify,
+        clear_workspace=args.clear_workspace,
     )
     _run_tests_serial(args.workspace, args.python, options)
 

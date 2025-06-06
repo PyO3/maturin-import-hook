@@ -7,6 +7,7 @@ from this directory, run
 
 ```shell
 cargo run -- ../maturin ../resolved.json
+cargo clean
 ```
 
 to update `resolved.json`

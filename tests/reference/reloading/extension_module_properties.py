@@ -14,6 +14,7 @@ from textwrap import dedent
 
 script_dir = Path(__file__).parent.resolve()
 logging.basicConfig(format="%(name)s [%(levelname)s] %(message)s", level=logging.DEBUG)
+log = logging.getLogger(__name__)
 
 
 def _build_module() -> None:
@@ -51,11 +52,11 @@ def main() -> None:
     sys.path.insert(0, str(tmp_path))
     _build_module()
 
-    logging.info("initial import start")
+    log.info("initial import start")
     import c_module  # type: ignore[missing-import]
     from c_module import get_num  # type: ignore[missing-import]
 
-    logging.info("initial import end")
+    log.info("initial import end")
 
     c_module_path.write_text(c_module_path.read_text().replace("int num = 10;", "int num = 20;"))
 
@@ -72,10 +73,10 @@ def main() -> None:
 
     c_module.get_num = foo
 
-    logging.info("reload start")
+    log.info("reload start")
     _build_module()
     importlib.reload(c_module)
-    logging.info("reload end")
+    log.info("reload end")
 
     # as expected (see docs/reloading.md) reloading an extension module does not load new functionality
     assert c_module.get_num() == 123  # reloading does not reset the state of the PyMethodDef object

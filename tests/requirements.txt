@@ -1,6 +1,6 @@
 -e ..
 uv
-maturin==1.8.2
+maturin==1.8.4
 pytest
 junit2html
 uniffi-bindgen==0.28.0

@@ -1070,7 +1070,7 @@ class TestLogging:
         assert output == (
             'building "test_project"\n'
             "caught MaturinError('unsupported maturin version: (0, 1, 2). "
-            "Import hook requires >=(1, 5, 0),<(2, 0, 0)')\n"
+            "Import hook requires >=(1, 8, 4),<(2, 0, 0)')\n"
         )
 
     @pytest.mark.parametrize("is_mixed", [False, True])
@@ -1404,10 +1404,10 @@ def _install_editable(project_dir: Path) -> None:
     assert maturin_path is not None
     env = os.environ.copy()
     env["VIRTUAL_ENV"] = sys.exec_prefix
-    args = [maturin_path, "develop"]
+    cmd = [maturin_path, "develop"]
     if get_package_installer() == PackageInstaller.UV:
-        args.append("--uv")
-    subprocess.check_call(args, cwd=project_dir, env=env)
+        cmd.append("--uv")
+    subprocess.check_call(cmd, cwd=project_dir, env=env)
 
 
 def _install_non_editable(project_dir: Path) -> None:

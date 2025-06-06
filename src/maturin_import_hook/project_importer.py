@@ -100,7 +100,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
     def find_maturin(self) -> Path:
         """this method can be overridden to specify an alternative maturin binary to use"""
         if self._maturin_path is None:
-            self._maturin_path = find_maturin((1, 5, 0), (2, 0, 0))
+            self._maturin_path = find_maturin((1, 8, 4), (2, 0, 0))
         return self._maturin_path
 
     def invalidate_caches(self) -> None:
@@ -392,7 +392,7 @@ def _find_maturin_project_above(path: Path) -> Optional[Path]:
 
 def _find_dist_info_path(directory: Path, package_name: str) -> Optional[Path]:
     try:
-        names = os.listdir(directory)
+        names = [item.name for item in directory.iterdir()]
     except FileNotFoundError:
         return None
     for name in names:

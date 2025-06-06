@@ -110,5 +110,7 @@ fn main() {
     root.insert("crates".to_owned(), resolved);
     let output = serde_json::to_string_pretty(&Value::Object(root)).unwrap();
 
-    fs::write(output_path, output).unwrap();
+    fs::write(&output_path, output).unwrap();
+
+    println!("\n\nWRITTEN SUCCESSFULLY TO {:?}", output_path);
 }
