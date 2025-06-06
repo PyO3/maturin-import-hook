@@ -88,10 +88,11 @@ class PackageInstaller:
 
     def install_requirements_file(self, requirements_path: Path) -> None:
         log.info("using %s to install '%s' into %s", self._backend, requirements_path, self._interpreter)
-        cmd = [*self._pip_command("install"), "-r", str(requirements_path)]
+        cmd = [*self._pip_command("install"), "-r", str(requirements_path.name)]
         proc = subprocess.run(
             cmd,
             capture_output=True,
+            cwd=requirements_path.parent,
             check=False,
         )
         if proc.returncode != 0:
