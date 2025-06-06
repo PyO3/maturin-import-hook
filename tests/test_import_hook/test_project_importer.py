@@ -1409,9 +1409,12 @@ def test_non_directory_in_search_path(tmp_path: Path) -> None:
     log.info("running %s", script_path)
     stdout = subprocess.check_output([str(script_path)], cwd=tmp_path).decode()
     sys_path = json.loads(stdout)
-    assert any(Path(p).is_file() for p in sys_path), (
-        "sys.path must contain a non-directory for this test to be effective"
-    )
+    file_in_sys_path = any(Path(p).is_file() for p in sys_path)
+    if platform.system() == "Windows":
+        # sys.path contains file + ran successfully
+        assert file_in_sys_path, "sys.path must contain a non-directory for this test to be effective"
+    else:
+        assert not file_in_sys_path, "sys.path should only contain the script file path on Windows"
 
 
 def _up_to_date_message(project_name: str) -> str:
