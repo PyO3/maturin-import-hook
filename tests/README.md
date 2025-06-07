@@ -5,12 +5,14 @@ These tests ensure that the import hook behaves correctly when installing a wide
 The recommended way to run the tests is to run:
 
 ```bash
-git submodule update ./maturin
+git submodule update --init ./maturin
 python runner.py
 ```
 
 This script will create an isolated environment for the tests to run in
 and produce a html report from the test results (see `runner.py --help` for options).
+
+The tests will use maturin from pypi with the version specified in the requirements.txt file.
 
 ## Alternatives
 
@@ -40,7 +42,7 @@ To update maturin:
 - check that no crates have been added to `test-crates` that should be excluded from the import hook tests.
   If so, add them to `IGNORED_TEST_CRATES` in `common.py`
 - upgrade the test packages in `test_import_hook/*_helpers`
-    - check what version of `pyo3` is used by the command: `maturin new --bindings pyo3`
+    - check what version of `pyo3` is used by the command: `maturin new --bindings pyo3 test_project`
 - update the version check in the import hook to ensure it allows using the new version
 - run the tests to ensure everything still works
 
@@ -51,9 +53,9 @@ to use a specific maturin commit:
     - where `xxxxxxx` is a git commit hash
 - `export MATURIN_SETUP_ARGS="--features=scaffolding"` before running `runner.py`
     - the `setup.py` of `maturin` uses this environment variable when building from source. the `scaffolding` feature
-    is required for `maturin new`.
+      is required for `maturin new`.
     - Make sure a cached built version of this commit is not available because `uv` doesn't know about the
-    environment variable. run `uv cache clean maturin` to remove any cached versions.
+      environment variable. run `uv cache clean maturin` to remove any cached versions.
 
 ## Notes
 
