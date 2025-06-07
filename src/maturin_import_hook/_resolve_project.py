@@ -63,7 +63,11 @@ def find_cargo_manifest(project_dir: Path) -> Optional[Path]:
     if pyproject_path.is_file():
         pyproject_data = pyproject_path.read_text()
         if "manifest-path" in pyproject_data:
-            pyproject = _TomlFile.from_string(pyproject_path, pyproject_data)
+            try:
+                pyproject = _TomlFile.from_string(pyproject_path, pyproject_data)
+            except tomllib.TOMLDecodeError:
+                logger.info("failed to parse '%s' as TOML", pyproject_path)
+                return None
             relative_manifest_path = pyproject.get_value(["tool", "maturin", "manifest-path"], str)
             if relative_manifest_path is not None:
                 return project_dir / relative_manifest_path
@@ -151,8 +155,12 @@ def _find_all_path_dependencies(immediate_path_dependencies: list[Path]) -> list
         all_path_dependencies.add(dependency_project_dir)
         manifest_path = dependency_project_dir / "Cargo.toml"
         if manifest_path.exists():
-            cargo = _TomlFile.load(manifest_path)
-            to_search.extend(_get_immediate_path_dependencies(dependency_project_dir, cargo))
+            try:
+                cargo = _TomlFile.load(manifest_path)
+            except tomllib.TOMLDecodeError:
+                logger.info("failed to parse '%s' as TOML", manifest_path)
+            else:
+                to_search.extend(_get_immediate_path_dependencies(dependency_project_dir, cargo))
     return sorted(all_path_dependencies)
 
 
@@ -169,7 +177,12 @@ def _resolve_project(project_dir: Path) -> MaturinProject:
     if not pyproject_path.exists():
         msg = "no pyproject.toml found"
         raise _ProjectResolveError(msg)
-    pyproject = _TomlFile.load(pyproject_path)
+    try:
+        pyproject = _TomlFile.load(pyproject_path)
+    except tomllib.TOMLDecodeError as e:
+        msg = f"pyproject.toml failed to parse as TOML: {e!r}"
+        raise _ProjectResolveError(msg) from None
+
     if not _is_valid_pyproject(pyproject):
         msg = "pyproject.toml is invalid (does not have required fields)"
         raise _ProjectResolveError(msg)
@@ -178,7 +191,11 @@ def _resolve_project(project_dir: Path) -> MaturinProject:
     if manifest_path is None:
         msg = "no Cargo.toml found"
         raise _ProjectResolveError(msg)
-    cargo = _TomlFile.load(manifest_path)
+    try:
+        cargo = _TomlFile.load(manifest_path)
+    except tomllib.TOMLDecodeError as e:
+        msg = f"Cargo.toml failed to parse as TOML: {e!r}"
+        raise _ProjectResolveError(msg) from None
 
     module_full_name = _resolve_module_name(pyproject, cargo)
     if module_full_name is None:
@@ -189,7 +206,7 @@ def _resolve_project(project_dir: Path) -> MaturinProject:
 
     extension_module_dir: Optional[Path]
     python_module: Optional[Path]
-    python_module, extension_module_dir, extension_module_name = _resolve_rust_module(python_dir, module_full_name)
+    python_module, extension_module_dir, _extension_module_name = _resolve_rust_module(python_dir, module_full_name)
     immediate_path_dependencies = _get_immediate_path_dependencies(manifest_path.parent, cargo)
 
     if not python_module.exists():
