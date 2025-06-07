@@ -6,7 +6,12 @@ The recommended way to run the tests is to run:
 
 ```bash
 git submodule update --init ./maturin
+
+# run with the active interpreter
 python runner.py
+
+# or run with an interpreter installed via uv
+uv run --no-project --python 3.13t runner.py
 ```
 
 This script will create an isolated environment for the tests to run in

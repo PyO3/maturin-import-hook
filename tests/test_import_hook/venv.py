@@ -76,7 +76,7 @@ class PackageInstaller:
         log.debug("%s", proc.stdout.decode())
 
     def uninstall(self, *project_names: str) -> None:
-        log.info("using %s to uninstall %s into '%s'", self._backend, project_names, self._interpreter)
+        log.info("using %s to uninstall %s from '%s'", self._backend, project_names, self._interpreter)
         cmd = self._pip_command("uninstall")
         if self._backend == PackageInstallerBackend.UV:
             cmd += [*project_names]
@@ -87,7 +87,9 @@ class PackageInstaller:
         subprocess.check_call(cmd)
 
     def install_requirements_file(self, requirements_path: Path) -> None:
-        log.info("using %s to install '%s' into %s", self._backend, requirements_path, self._interpreter)
+        log.info(
+            "using %s to install requirements from '%s' into %s", self._backend, requirements_path, self._interpreter
+        )
         cmd = [*self._pip_command("install"), "-r", str(requirements_path.name)]
         proc = subprocess.run(
             cmd,
@@ -162,6 +164,11 @@ class VirtualEnv:
         if not interpreter_path.exists():
             raise FileNotFoundError(interpreter_path)
         log.info("creating test virtualenv at '%s' from '%s'", root, interpreter_path)
+        proc = subprocess.run(
+            [str(interpreter_path), "-c", "import sys; print(sys.version)"], capture_output=True, check=True
+        )
+        log.info("python: %s", proc.stdout.decode().strip())
+
         cmd = _create_virtual_env_command(interpreter_path, root, installer_backend)
         proc = subprocess.run(cmd, capture_output=True, check=True)
         log.debug("%s", proc.stdout.decode())
