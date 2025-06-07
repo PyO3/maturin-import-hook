@@ -10,7 +10,7 @@ fn get_num() -> usize {
     }
 }
 
-#[pymodule]
+#[pymodule(gil_used = false)]
 fn my_project(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_wrapped(wrap_pyfunction!(get_num))?;
     Ok(())

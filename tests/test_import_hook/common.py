@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 import sys
+import sysconfig
 import tempfile
 import time
 from collections.abc import Iterator
@@ -22,7 +23,10 @@ log = logging.getLogger(__name__)
 
 # the CI does not have enough space to keep the outputs.
 # When running locally you may set this to False for debugging
-CLEAR_WORKSPACE = False
+CLEAR_WORKSPACE = True
+
+# https://docs.python.org/3/howto/free-threading-python.html#identifying-free-threaded-python
+IS_FREE_THREADED = sysconfig.get_config_var("Py_GIL_DISABLED")
 
 MATURIN_DIR = (script_dir / "../maturin").resolve()
 TEST_CRATES_DIR = MATURIN_DIR / "test-crates"
@@ -33,6 +37,13 @@ IGNORED_TEST_CRATES = {
     "pyo3-bin",  # not imported as a python module (subprocess only)
     "workspace-inverted-order",  # this directory is not a maturin package, only the subdirectory
 }
+# these test-crates do not work with free-threaded python
+# (to verify: run `maturin develop` to install them into an appropriate virtualenv and try to run the
+# corresponding `check_installed.py` script)
+if IS_FREE_THREADED:
+    IGNORED_TEST_CRATES |= {
+        "pyo3-ffi-pure",
+    }
 
 
 IMPORT_HOOK_HEADER = """
