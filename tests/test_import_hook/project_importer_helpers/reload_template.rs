@@ -95,7 +95,7 @@ fn register_child_module(py: Python<'_>, parent_module: &Bound<'_, PyModule>) ->
     Ok(())
 }
 
-#[pymodule]
+#[pymodule(gil_used = false)]
 fn my_project(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_wrapped(wrap_pyfunction!(get_num))?;
     m.add_wrapped(wrap_pyfunction!(get_global_num))?;

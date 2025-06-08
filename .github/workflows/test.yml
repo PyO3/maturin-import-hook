@@ -1,5 +1,7 @@
 name: Test
 
+# note: when updating the matrix, make sure the `workflow_dispatch` and `generate-matrix` entries match
+
 on:
   workflow_dispatch:
     inputs:
@@ -15,13 +17,12 @@ on:
       python_version:
         type: choice
         description: Python version to test with
-        default: '3.12'
+        default: '3.13'
         options:
         - 'all'
         - '3.9'
-        - '3.10'
-        - '3.11'
-        - '3.12'
+        - '3.13t'
+        - '3.13'
         - 'pypy3.9'
         - 'pypy3.10'
       test_specification:
@@ -57,9 +58,8 @@ jobs:
         - windows-latest
       PYTHON_VERSION: |
         - '3.9'
-        - '3.10'
-        - '3.11'
-        - '3.12'
+        - '3.13t'
+        - '3.13'
         - 'pypy3.9'
         - 'pypy3.10'
     steps:
