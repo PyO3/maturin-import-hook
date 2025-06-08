@@ -7,12 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0]
+
 - fix issue with running scripts installed on Windows (can handle non-directories in `sys.path`)
   [#21](https://github.com/PyO3/maturin-import-hook/issues/21)
   [#23](https://github.com/PyO3/maturin-import-hook/pull/23)
 - improve handling of TOML parsing errors [#20](https://github.com/PyO3/maturin-import-hook/pull/20)
 - raise minimum maturin to 1.8.4 [#22](https://github.com/PyO3/maturin-import-hook/pull/22)
-- update to maturin 1.8.2
     - remove `--detect-uv` argument to `maturin_import_hook site install` because maturin now automatically detects uv
     environments
 
@@ -35,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial release of the import hook.
 
-[Unreleased]: https://github.com/pyo3/maturin-import-hook/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/pyo3/maturin-import-hook/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/pyo3/maturin-import-hook/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/pyo3/maturin-import-hook/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/pyo3/maturin-import-hook/compare/c2689735a61a322998f7304a113b7c74b8108ab3...v0.1.0

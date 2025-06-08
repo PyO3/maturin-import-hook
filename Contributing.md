@@ -48,7 +48,9 @@ a PR, but generally stick to conforming to the suggested linter rules.
 
 1. Bump the version number in `pyproject.toml`.
 2. Update `Changelog.md` to reflect the new changes.
-3. Check out the commit you want to make a release from.
-4. Run `git tag <version>` e.g. `git tag v0.1.0`.
-5. Run `git push origin <version>` e.g. `git push origin v0.1.0`.
+3. Make a pull request for the changes and get it merged.
+    - tag the pull request with CI-test-all
+4. Check out the latest changes on the `main` branch.
+5. Run `git tag <version>` e.g. `git tag v0.1.0`.
+6. Run `git push origin <version>` e.g. `git push origin v0.1.0`.
     - This will trigger the 'release' github action which will upload to PyPi.
