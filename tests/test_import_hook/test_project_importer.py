@@ -7,8 +7,8 @@ import shutil
 import site
 import subprocess
 import sys
+import textwrap
 from collections.abc import Iterator
-from enum import Enum
 from pathlib import Path
 from textwrap import dedent
 from typing import Any
@@ -36,6 +36,7 @@ from .common import (
     set_file_times_recursive,
     with_underscores,
 )
+from .venv import PackageInstaller, PackageInstallerBackend, VirtualEnv
 
 """
 These tests ensure the correct functioning of the project importer import hook.
@@ -54,15 +55,16 @@ log = logging.getLogger(__name__)
 def _reset_virtualenv() -> Iterator[None]:
     """uninstall packages installed during each test. Technically not necessary since additional packages should
     not interfere with the tests but should result in clearer logs"""
-    packages_before = _get_installed_package_names()
+    installer = PackageInstaller.from_env()
+    packages_before = installer.package_names()
     try:
         yield
     finally:
-        packages_after = _get_installed_package_names()
+        packages_after = installer.package_names()
         packages_to_uninstall = sorted(packages_after - packages_before)
         if packages_to_uninstall:
             log.info("uninstalling packages installed during this test: %s", packages_to_uninstall)
-            _uninstall(*packages_to_uninstall)
+            installer.uninstall(*packages_to_uninstall)
 
 
 @pytest.mark.parametrize(
@@ -1332,6 +1334,91 @@ class TestDefaultProjectFileSearcher:
         }
 
 
+def test_non_directory_in_search_path(tmp_path: Path) -> None:
+    """
+    see issue 21: https://github.com/PyO3/maturin-import-hook/issues/21
+
+    When a script from a python package is installed on windows, a `.exe` file gets created in `Scripts`
+    directory of the virtualenv. When this executable is run, the path to the .exe is an entry in `sys.path`.
+    Normally, `sys.path` only contains directories.
+    """
+    installer = PackageInstaller.from_env()
+    _uninstall("foo")
+    _uninstall("bar")
+
+    foo_project_dir = tmp_path / "foo"
+    foo_project_dir.mkdir()
+    (foo_project_dir / "pyproject.toml").write_text(
+        textwrap.dedent("""\
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        authors = []
+        requires-python = ">=3.0"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        """)
+    )
+    (foo_project_dir / "src/foo").mkdir(parents=True)
+    (foo_project_dir / "src/foo/__init__.py").write_text(
+        textwrap.dedent("""\
+        import json
+        import sys
+
+        import maturin_import_hook
+        maturin_import_hook.install()
+
+        # this import will trigger the import hook
+        import bar
+
+        def main():
+            print(json.dumps(sys.path))
+        """)
+    )
+    installer.install(foo_project_dir, editable=True)
+
+    bar_project_dir = tmp_path / "bar"
+    bar_project_dir.mkdir()
+    (bar_project_dir / "pyproject.toml").write_text(
+        textwrap.dedent("""\
+        [project]
+        name = "bar"
+        version = "0.1.0"
+        description = "Add your description here"
+        authors = []
+        requires-python = ">=3.0"
+        dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        """)
+    )
+    (bar_project_dir / "src/bar").mkdir(parents=True)
+    (bar_project_dir / "src/bar/__init__.py").touch()
+    installer.install(bar_project_dir, editable=True)
+
+    venv = VirtualEnv.from_env()
+    script_path = venv.script_path("foo")
+
+    log.info("running %s", script_path)
+    stdout = subprocess.check_output([str(script_path)], cwd=tmp_path).decode()
+    sys_path = json.loads(stdout)
+    file_in_sys_path = any(Path(p).is_file() for p in sys_path)
+    if platform.system() == "Windows":
+        # sys.path contains file + ran successfully
+        assert file_in_sys_path, "sys.path must contain a non-directory for this test to be effective"
+    else:
+        assert not file_in_sys_path, "sys.path should only contain the script file path on Windows"
+
+
 def _up_to_date_message(project_name: str) -> str:
     return f'package up to date: "{with_underscores(project_name)}"'
 
@@ -1340,60 +1427,9 @@ def _rebuilt_message(project_name: str) -> str:
     return f'rebuilt and loaded package "{with_underscores(project_name)}"'
 
 
-class PackageInstaller(Enum):
-    PIP = "pip"
-    UV = "uv"
-
-    def __str__(self) -> str:
-        return self.value
-
-
-def get_package_installer() -> PackageInstaller:
-    # set by `runner.py`
-    key = "MATURIN_IMPORT_HOOK_TEST_PACKAGE_INSTALLER"
-    if key not in os.environ:
-        msg = f"environment variable {key} not set"
-        raise RuntimeError(msg)
-    return PackageInstaller(os.environ[key])
-
-
-def _uninstall(*project_names: str) -> None:
-    log.info("uninstalling %s", sorted(project_names))
-    installer = get_package_installer()
-    if installer == PackageInstaller.UV:
-        cmd = ["uv", "pip", "uninstall", "--python", str(sys.executable), *project_names]
-    elif installer == PackageInstaller.PIP:
-        cmd = [
-            sys.executable,
-            "-m",
-            "pip",
-            "uninstall",
-            "--disable-pip-version-check",
-            "-y",
-            *project_names,
-        ]
-    else:
-        raise ValueError(installer)
-    subprocess.check_call(cmd)
-
-
-def _get_installed_package_names() -> set[str]:
-    installer = get_package_installer()
-    if installer == PackageInstaller.UV:
-        cmd = ["uv", "pip", "list", "--python", sys.executable, "--format", "json"]
-    elif installer == PackageInstaller.PIP:
-        cmd = [
-            sys.executable,
-            "-m",
-            "pip",
-            "--disable-pip-version-check",
-            "list",
-            "--format=json",
-        ]
-    else:
-        raise ValueError(installer)
-    packages = json.loads(subprocess.check_output(cmd).decode())
-    return {package["name"] for package in packages}
+def _uninstall(project_name: str) -> None:
+    installer = PackageInstaller.from_env()
+    installer.uninstall(project_name)
 
 
 def _install_editable(project_dir: Path) -> None:
@@ -1405,21 +1441,15 @@ def _install_editable(project_dir: Path) -> None:
     env = os.environ.copy()
     env["VIRTUAL_ENV"] = sys.exec_prefix
     cmd = [maturin_path, "develop"]
-    if get_package_installer() == PackageInstaller.UV:
+    if PackageInstallerBackend.from_env() == PackageInstallerBackend.UV:
         cmd.append("--uv")
     subprocess.check_call(cmd, cwd=project_dir, env=env)
 
 
 def _install_non_editable(project_dir: Path) -> None:
     log.info("installing %s in non-editable mode", project_dir.name)
-    installer = get_package_installer()
-    if installer == PackageInstaller.UV:
-        cmd = ["uv", "pip", "install", "--python", sys.executable, str(project_dir)]
-    elif installer == PackageInstaller.PIP:
-        cmd = [sys.executable, "-m", "pip", "install", "--disable-pip-version-check", str(project_dir)]
-    else:
-        raise ValueError(installer)
-    subprocess.check_call(cmd)
+    installer = PackageInstaller.from_env()
+    installer.install(project_dir, editable=False)
 
 
 def _is_installed_as_pth(project_name: str) -> bool:
@@ -1452,23 +1482,9 @@ def _is_editable_installed_correctly(project_name: str, project_dir: Path, is_mi
         installed_editable_with_direct_url,
     )
 
-    installer = get_package_installer()
-    if installer == PackageInstaller.UV:
-        # TODO(matt): use uv once the --files option is supported https://github.com/astral-sh/uv/issues/2526
-        cmd = [sys.executable, "-m", "pip", "show", "--disable-pip-version-check", "-f", project_name]
-    elif installer == PackageInstaller.PIP:
-        cmd = [sys.executable, "-m", "pip", "show", "--disable-pip-version-check", "-f", project_name]
-    else:
-        raise ValueError(installer)
-
-    proc = subprocess.run(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        check=False,
-    )
-    output = "None" if proc.stdout is None else proc.stdout.decode()
-    log.info("command output (returned %s):\n%s", proc.returncode, output)
+    installer = PackageInstaller.from_env()
+    return_code, output = installer.pip_show(project_name)
+    log.info("command output (returned %s):\n%s", return_code, output)
     return installed_editable_with_direct_url and (installed_as_pth == is_mixed)
 
 

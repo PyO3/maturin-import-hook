@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 from textwrap import dedent
 
@@ -10,6 +11,11 @@ from maturin_import_hook._site import (
 )
 
 from .common import capture_logs
+
+script_dir = Path(__file__).resolve().parent
+maturin_import_hook_root = script_dir.parent.parent
+
+log = logging.getLogger(__name__)
 
 
 def test_automatic_site_installation(tmp_path: Path) -> None:

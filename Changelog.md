@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- fix issue with running scripts installed on Windows (can handle non-directories in `sys.path`)
+  [#21](https://github.com/PyO3/maturin-import-hook/issues/21)
+  [#23](https://github.com/PyO3/maturin-import-hook/pull/23)
 - improve handling of TOML parsing errors [#20](https://github.com/PyO3/maturin-import-hook/pull/20)
 - raise minimum maturin to 1.8.4 [#22](https://github.com/PyO3/maturin-import-hook/pull/22)
 - update to maturin 1.8.2

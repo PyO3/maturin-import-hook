@@ -393,7 +393,7 @@ def _find_maturin_project_above(path: Path) -> Optional[Path]:
 def _find_dist_info_path(directory: Path, package_name: str) -> Optional[Path]:
     try:
         names = [item.name for item in directory.iterdir()]
-    except FileNotFoundError:
+    except (FileNotFoundError, NotADirectoryError):
         return None
     for name in names:
         if name.startswith(package_name) and name.endswith(".dist-info"):
