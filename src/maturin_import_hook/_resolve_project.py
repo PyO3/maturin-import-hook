@@ -112,6 +112,9 @@ class MaturinProject:
     # the name of the compiled extension module without any suffix
     # (i.e. "some_package.my_module" instead of "some_package/my_module.cpython-311-x86_64-linux-gnu")
     module_full_name: str
+    # the name of the package containing the module, accounting for namespacing
+    # (e.g. foo.a for an implicit package at foo/a/__init__.py, foo for one at foo/__init__.py)
+    package_name: str
     # the root of the python part of the project (or the project root if there is none)
     python_dir: Path
     # the path to the top level python package if the project is mixed
@@ -122,10 +125,6 @@ class MaturinProject:
     immediate_path_dependencies: list[Path]
     # all path dependencies including transitive dependencies
     _all_path_dependencies: Optional[list[Path]] = None
-
-    @property
-    def package_name(self) -> str:
-        return self.module_full_name.split(".")[0]
 
     @property
     def module_name(self) -> str:
@@ -209,13 +208,15 @@ def _resolve_project(project_dir: Path) -> MaturinProject:
     python_module, extension_module_dir, _extension_module_name = _resolve_rust_module(python_dir, module_full_name)
     immediate_path_dependencies = _get_immediate_path_dependencies(manifest_path.parent, cargo)
 
+    package_name = ".".join(python_module.relative_to(python_dir).parts)
     if not python_module.exists():
         extension_module_dir = None
         python_module = None
-
+        package_name = module_full_name.split(".")[0]
     return MaturinProject(
         cargo_manifest_path=manifest_path,
         module_full_name=module_full_name,
+        package_name=package_name,
         python_dir=python_dir,
         python_module=python_module,
         extension_module_dir=extension_module_dir,
@@ -238,8 +239,14 @@ def _resolve_rust_module(python_dir: Path, module_name: str) -> tuple[Path, Path
     """
     parts = module_name.split(".")
     if len(parts) > 1:
-        python_module = python_dir / parts[0]
+        # Find the first level between the module name and the python source dir containing
+        # an __init__.py
         extension_module_dir = python_dir / Path(*parts[:-1])
+        python_module = extension_module_dir
+        while python_module != python_dir:
+            if (python_module / "__init__.py").exists():
+                break
+            python_module = python_module.parent()
         extension_module_name = parts[-1]
     else:
         python_module = python_dir / module_name
