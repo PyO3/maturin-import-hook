@@ -593,7 +593,7 @@ class DefaultProjectFileSearcher(ProjectFileSearcher):
 
         for dir_str, dirs, files in os.walk(root_path, topdown=True):
             dir_path = Path(dir_str)
-            include_dir = dir_path not in ignore_dirs and not any(dir_name in excluded_dir_markers for dir_name in dirs)
+            include_dir = dir_path not in ignore_dirs and not any(name in excluded_dir_markers for name in files)
 
             if include_dir:
                 dirs[:] = sorted(dir_name for dir_name in dirs if dir_name not in excluded_dir_names)
