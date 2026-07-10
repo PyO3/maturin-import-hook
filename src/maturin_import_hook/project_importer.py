@@ -487,6 +487,7 @@ class DefaultProjectFileSearcher(ProjectFileSearcher):
         ".ipynb_checkpoints",
         ".mypy_cache",
         ".nox",
+        ".pixi",
         ".pyre",
         ".pytest_cache",
         ".ropeproject",
