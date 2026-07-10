@@ -6,6 +6,7 @@ import itertools
 import json
 import logging
 import os
+import re
 import site
 import sys
 import tempfile
@@ -15,10 +16,11 @@ import urllib.request
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Sequence
 from functools import lru_cache
+from importlib._bootstrap_external import _NamespacePath
 from importlib.machinery import ExtensionFileLoader, ModuleSpec, PathFinder
 from pathlib import Path
 from types import ModuleType
-from typing import ClassVar, Optional, Union
+from typing import Any, ClassVar, Optional, Union
 
 from maturin_import_hook._building import (
     BuildCache,
@@ -49,6 +51,7 @@ __all__ = [
     "uninstall",
 ]
 
+_DIST_INFO_REGEX = re.compile(r"^(?P<package_name>.+?)-\d[\w\.\-]*\.dist-info$")
 
 class ProjectFileSearcher(ABC):
     @abstractmethod
@@ -112,13 +115,16 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
     def find_spec(
         self,
         fullname: str,
-        path: Optional[Sequence[Union[str, bytes]]] = None,
+        path: Optional[Sequence[Union[str, bytes]] | _NamespacePath] = None,
         target: Optional[ModuleType] = None,
     ) -> Optional[ModuleSpec]:
-        is_top_level_import = path is None
+        is_in_namespace = path is not None and not isinstance(path, Sequence)
+        is_top_level_import = path is None or is_in_namespace
         if not is_top_level_import:
             return None
-        assert "." not in fullname
+        if not is_in_namespace:
+            assert "." not in fullname
+        # Impossible to tell if fullname corresponds to a bare namespace at this point
         package_name = fullname
 
         already_loaded = package_name in sys.modules
@@ -140,7 +146,10 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
         spec = None
         rebuilt = False
         for search_path in search_paths:
-            project_dir, is_editable = _load_dist_info(search_path, package_name)
+            # Account for namespaced packages
+            dist_name = package_name.replace(".", "_")
+            project_dir, is_editable = _load_dist_info(search_path, dist_name)
+            # namespaces do not have dist-infos of their own
             if project_dir is not None:
                 logger.debug('found project linked by dist-info: "%s"', project_dir)
                 if not is_editable and not self._enable_automatic_installation:
@@ -148,7 +157,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
                         "package not installed in editable-mode and enable_automatic_installation=False. not rebuilding"
                     )
                 else:
-                    spec, rebuilt = self._rebuild_project(package_name, project_dir)
+                    spec, rebuilt = self._rebuild_project(package_name, project_dir, dist_name)
                     if spec is not None:
                         break
 
@@ -159,7 +168,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
                     project_dir,
                     search_path,
                 )
-                spec, rebuilt = self._rebuild_project(package_name, project_dir)
+                spec, rebuilt = self._rebuild_project(package_name, project_dir, dist_name)
                 if spec is not None:
                     break
 
@@ -221,6 +230,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
         self,
         package_name: str,
         project_dir: Path,
+        dist_name: str
     ) -> tuple[Optional[ModuleSpec], bool]:
         resolved = self._resolver.resolve(project_dir)
         if resolved is None:
@@ -238,7 +248,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
             )
             return None, False
 
-        if not self._enable_automatic_installation and not _is_editable_installed_package(project_dir, package_name):
+        if not self._enable_automatic_installation and not _is_editable_installed_package(project_dir, dist_name):
             logger.debug(
                 'package "%s" is not already installed and enable_automatic_installation=False. Not importing',
                 package_name,
@@ -344,7 +354,24 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
 
 def _find_spec_for_package(package_name: str) -> Optional[ModuleSpec]:
     path_finder = PathFinder()
-    spec = path_finder.find_spec(package_name)
+    current_path: Optional[Path] = None
+    for item in package_name.split("."):
+        spec = path_finder.find_spec(item, current_path)
+        if not spec:
+            break
+        if spec.submodule_search_locations and not isinstance(spec.submodule_search_locations, Sequence):
+            current_path = spec.submodule_search_locations
+        if isinstance(spec.submodule_search_locations, Sequence):
+            # Definitely a regular package at this point
+            # Unconditionally reset the name on the ModuleSpec to the package_name
+            # (recursing down through a namespace with a PathFinder ends up producing
+            # a ModuleSpec with just the terminal name)
+            spec.name = package_name
+            # Ensure the loader is synchronized with that too
+            assert spec.loader is not None
+            # Definitionally, this is *not* a namespace loader
+            spec.loader.name = package_name
+            break
     if spec is not None:
         return spec
     logger.debug('spec for package "%s" not found', package_name)
@@ -396,7 +423,8 @@ def _find_dist_info_path(directory: Path, package_name: str) -> Optional[Path]:
     except (FileNotFoundError, NotADirectoryError):
         return None
     for name in names:
-        if name.startswith(package_name) and name.endswith(".dist-info"):
+        match_res = _DIST_INFO_REGEX.match(name)
+        if match_res is not None and match_res.group("package_name") == package_name:
             return Path(directory / name)
     return None
 
