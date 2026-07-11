@@ -21,8 +21,8 @@ on:
         options:
         - 'all'
         - '3.11'
-        - '3.14t'
-        - '3.14'
+        - '3.13t'
+        - '3.13'
         - 'pypy3.11'
       test_specification:
         type: string
@@ -57,8 +57,8 @@ jobs:
         - windows-latest
       PYTHON_VERSION: |
         - '3.11'
-        - '3.14t'
-        - '3.14'
+        - '3.13t'
+        - '3.13'
         - 'pypy3.11'
     steps:
       - uses: actions/setup-node@v4
