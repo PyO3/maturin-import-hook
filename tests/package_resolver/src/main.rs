@@ -41,18 +41,18 @@ fn resolve_package(project_root: &Path) -> Result<Value> {
     } else {
         None
     };
-    let python_module = if let Some(p) = build_context.project_layout.python_module {
-        Some(relative_path(&p, &project_root)?)
+    let python_module = if let Some(p) = &build_context.project_layout.python_module {
+        Some(relative_path(p, &project_root)?)
     } else {
         None
     };
 
     Ok(json!({
         "cargo_manifest_path": relative_path(&build_context.manifest_path, &project_root)?,
+        "extension_module_dir": extension_module_dir,
+        "module_full_name": build_context.module_name,
         "python_dir": relative_path(&build_context.project_layout.python_dir, &project_root)?,
         "python_module": python_module,
-        "module_full_name": build_context.module_name,
-        "extension_module_dir": extension_module_dir
     }))
 }
 

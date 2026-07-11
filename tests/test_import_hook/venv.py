@@ -35,13 +35,18 @@ class PackageInstallerBackend(Enum):
 
 
 class PackageInstaller:
-    def __init__(self, *, backend: PackageInstallerBackend, interpreter_path: Path) -> None:
+    def __init__(self, *, backend: PackageInstallerBackend, interpreter_path: Path, offline: bool) -> None:
         self._backend = backend
         self._interpreter = interpreter_path
+        self._offline = offline
 
     @staticmethod
     def from_env() -> PackageInstaller:
-        return PackageInstaller(backend=PackageInstallerBackend.from_env(), interpreter_path=Path(sys.executable))
+        return PackageInstaller(
+            backend=PackageInstallerBackend.from_env(),
+            interpreter_path=Path(sys.executable),
+            offline="UV_OFFLINE" in os.environ,
+        )
 
     @property
     def backend(self) -> PackageInstallerBackend:
@@ -54,7 +59,10 @@ class PackageInstaller:
     def _pip_command(self, name: str) -> list[str]:
         """the package installers have a 'pip-compatible' interface"""
         if self._backend == PackageInstallerBackend.UV:
-            return ["uv", "pip", name, "--python", str(self._interpreter)]
+            cmd = ["uv", "pip", name, "--python", str(self._interpreter)]
+            if self._offline:
+                cmd.append("--offline")
+            return cmd
         elif self._backend == PackageInstallerBackend.PIP:
             return [str(self._interpreter), "-m", "pip", name, "--disable-pip-version-check"]
         else:
@@ -129,11 +137,14 @@ class PackageInstaller:
 
 
 def _create_virtual_env_command(
-    interpreter_path: Path, venv_path: Path, installer_backend: PackageInstallerBackend
+    interpreter_path: Path, venv_path: Path, installer_backend: PackageInstallerBackend, *, offline: bool
 ) -> list[str]:
     if installer_backend == PackageInstallerBackend.UV:
         log.info("using uv to create virtual environments")
-        return ["uv", "venv", "--seed", "--python", str(interpreter_path), str(venv_path)]
+        cmd = ["uv", "venv", "--seed", "--python", str(interpreter_path), str(venv_path)]
+        if offline:
+            cmd.append("--offline")
+        return cmd
     elif shutil.which("virtualenv") is not None:
         log.info("using virtualenv to create virtual environments")
         return ["virtualenv", "--python", str(interpreter_path), str(venv_path)]
@@ -147,17 +158,21 @@ def _is_windows() -> bool:
 
 
 class VirtualEnv:
-    def __init__(self, root: Path, installer_backend: PackageInstallerBackend) -> None:
+    def __init__(self, root: Path, installer_backend: PackageInstallerBackend, *, offline: bool) -> None:
         self._root = root.resolve()
         self._is_windows = _is_windows()
-        self._package_installer = PackageInstaller(backend=installer_backend, interpreter_path=self.interpreter_path)
+        self._package_installer = PackageInstaller(
+            backend=installer_backend, interpreter_path=self.interpreter_path, offline=offline
+        )
 
     @staticmethod
     def from_env() -> VirtualEnv:
-        return VirtualEnv(Path(sys.exec_prefix), PackageInstallerBackend.from_env())
+        return VirtualEnv(Path(sys.exec_prefix), PackageInstallerBackend.from_env(), offline="UV_OFFLINE" in os.environ)
 
     @staticmethod
-    def create(root: Path, interpreter_path: Path, installer_backend: PackageInstallerBackend) -> VirtualEnv:
+    def create(
+        root: Path, interpreter_path: Path, installer_backend: PackageInstallerBackend, *, offline: bool
+    ) -> VirtualEnv:
         if root.exists():
             log.info("removing virtualenv at %s", root)
             shutil.rmtree(root)
@@ -169,11 +184,11 @@ class VirtualEnv:
         )
         log.info("python: %s", proc.stdout.decode().strip())
 
-        cmd = _create_virtual_env_command(interpreter_path, root, installer_backend)
+        cmd = _create_virtual_env_command(interpreter_path, root, installer_backend, offline=offline)
         proc = subprocess.run(cmd, capture_output=True, check=True)
         log.debug("%s", proc.stdout.decode())
         assert root.is_dir()
-        return VirtualEnv(root, installer_backend)
+        return VirtualEnv(root, installer_backend, offline=offline)
 
     @property
     def root_dir(self) -> Path:
