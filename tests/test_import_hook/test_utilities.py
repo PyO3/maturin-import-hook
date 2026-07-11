@@ -35,12 +35,12 @@ def test_maturin_unchanged() -> None:
     env = {"PATH": os.environ["PATH"], "COLUMNS": "120"}
 
     build_help = subprocess.check_output("stty rows 50 cols 120; maturin build --help", shell=True, env=env)  # noqa: S602
-    assert hashlib.sha1(build_help).hexdigest() == "ea47a884c90c9376047687aed98ab1dca29b433a", (
+    assert hashlib.sha1(build_help).hexdigest() == "310099f8b71a70563d1d0bdd5cb72a3040f16cd5", (
         f"hashes don't match. build_help = {build_help!r}"
     )
 
     develop_help = subprocess.check_output("stty rows 50 cols 120; maturin develop --help", shell=True, env=env)  # noqa: S602
-    assert hashlib.sha1(develop_help).hexdigest() == "ad7036a829c6801224933d589b1f9848678c9458", (
+    assert hashlib.sha1(develop_help).hexdigest() == "64a9a80feeaf0ef81c3500bddee40a6f0a5377bd", (
         f"hashes don't match. develop_help = {develop_help!r}"
     )
 
@@ -68,9 +68,10 @@ def test_settings() -> None:
         unstable_flags=["unstable1", "unstable2"],
         verbose=2,
         rustc_flags=["flag1", "--flag2"],
+        generate_stubs=True,
     )
     # fmt: off
-    expected_args = [
+    expected_common_args = [
         "--release",
         "--strip",
         "--quiet",
@@ -90,15 +91,25 @@ def test_settings() -> None:
         "-Z", "unstable1",
         "-Z", "unstable2",
         "-vv",
+    ]
+    # fmt: on
+    expected_develop_args = [
+        *expected_common_args,
+        "--generate-stubs",
         "--",
         "flag1",
         "--flag2",
     ]
-    # fmt: on
-    assert settings.to_args("develop") == expected_args
-    assert settings.to_args("build") == expected_args
+    expected_build_args = [
+        *expected_common_args,
+        "--",
+        "flag1",
+        "--flag2",
+    ]
+    assert settings.to_args("develop") == expected_develop_args
+    assert settings.to_args("build") == expected_build_args
 
-    assert MaturinSettings.from_args(expected_args) == settings
+    assert MaturinSettings.from_args(expected_develop_args) == settings
 
     build_settings = MaturinSettings(auditwheel="skip", zig=True)
     expected_args = [
@@ -112,11 +123,14 @@ def test_settings() -> None:
 
     develop_settings = MaturinSettings(
         extras=["extra1", "extra2"],
+        group=["group1", "group2"],
         skip_install=True,
     )
     expected_args = [
         "--extras",
         "extra1,extra2",
+        "--group",
+        "group1,group2",
         "--skip-install",
     ]
     assert develop_settings.to_args("develop") == expected_args
@@ -126,6 +140,7 @@ def test_settings() -> None:
     mixed_settings = MaturinSettings(
         color=True,
         extras=["extra1", "extra2"],
+        group=["group1", "group2"],
         skip_install=True,
         zig=True,
         rustc_flags=["flag1", "--flag2"],
@@ -135,6 +150,8 @@ def test_settings() -> None:
         "always",
         "--extras",
         "extra1,extra2",
+        "--group",
+        "group1,group2",
         "--skip-install",
         "--",
         "flag1",
@@ -335,6 +352,8 @@ def test_resolve_project(project_name: str) -> None:
             python_module=map_optional(resolved.python_module, _relative_path),
             extension_module_dir=map_optional(resolved.extension_module_dir, _relative_path),
             module_full_name=resolved.module_full_name,
+            bindings=resolved.bindings,
+            binary_names=resolved.binary_names,
         )
     log.info("calculated:")
     log.info(map_optional(calculated, lambda x: x.to_json()))

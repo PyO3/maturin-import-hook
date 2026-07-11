@@ -15,6 +15,7 @@ from typing import Any
 
 import pytest
 
+from maturin_import_hook._resolve_project import has_experimental_inspect
 from maturin_import_hook.project_importer import DefaultProjectFileSearcher, _load_dist_info
 
 from .common import (
@@ -30,6 +31,7 @@ from .common import (
     mixed_test_crate_names,
     remove_ansii_escape_characters,
     remove_executable_from_path,
+    resolved_packages,
     run_concurrent_python,
     run_python,
     run_python_code,
@@ -70,7 +72,7 @@ def _reset_virtualenv() -> Iterator[None]:
 @pytest.mark.parametrize(
     "project_name",
     # path dependencies tested separately
-    sorted(set(all_usable_test_crate_names()) - {"pyo3-mixed-with-path-dep"}),
+    sorted(set(all_usable_test_crate_names()) - {"cffi-mixed-with-path-dep"}),
 )
 def test_install_from_script_inside(workspace: Path, project_name: str) -> None:
     """This test ensures that when a script is run from within a maturin project, the
@@ -101,7 +103,7 @@ def test_install_from_script_inside(workspace: Path, project_name: str) -> None:
     assert _rebuilt_message(project_name) in output1
     assert _up_to_date_message(project_name) not in output1
 
-    assert _is_editable_installed_correctly(project_name, project_dir, "mixed" in project_name)
+    assert _is_editable_installed_correctly(project_name, project_dir, _is_mixed_project(project_name))
 
     output2, duration2 = run_python([str(check_installed_path)], cwd=empty_dir)
     assert "SUCCESS" in output2
@@ -110,7 +112,7 @@ def test_install_from_script_inside(workspace: Path, project_name: str) -> None:
 
     assert duration2 < duration1
 
-    assert _is_editable_installed_correctly(project_name, project_dir, "mixed" in project_name)
+    assert _is_editable_installed_correctly(project_name, project_dir, _is_mixed_project(project_name))
 
 
 @pytest.mark.parametrize("project_name", ["pyo3-mixed", "pyo3-pure"])
@@ -145,7 +147,7 @@ def test_do_not_install_from_script_inside(workspace: Path, project_name: str) -
     assert "SUCCESS" not in output1
 
     _install_editable(project_dir)
-    assert _is_editable_installed_correctly(project_name, project_dir, "mixed" in project_name)
+    assert _is_editable_installed_correctly(project_name, project_dir, _is_mixed_project(project_name))
 
     output2, _ = run_python([str(check_installed_path)], cwd=empty_dir)
     assert "SUCCESS" in output2
@@ -217,7 +219,8 @@ def test_do_not_rebuild_if_installed_non_editable(workspace: Path, project_name:
 @pytest.mark.parametrize(
     "project_name",
     # path dependencies tested separately
-    sorted(set(all_usable_test_crate_names()) - {"pyo3-mixed-with-path-dep"}),
+    # uniffi-multiple-crates: blank template uses directory name as package name, but real project uses "a"
+    sorted(set(all_usable_test_crate_names()) - {"cffi-mixed-with-path-dep", "uniffi-multiple-crates"}),
 )
 def test_import_editable_installed_rebuild(workspace: Path, project_name: str, initially_mixed: bool) -> None:
     """This test ensures that an editable installed project is rebuilt when necessary if the import
@@ -254,7 +257,7 @@ def test_import_editable_installed_rebuild(workspace: Path, project_name: str, i
     assert _rebuilt_message(project_name) in output1
     assert _up_to_date_message(project_name) not in output1
 
-    assert _is_editable_installed_correctly(project_name, project_dir, "mixed" in project_name)
+    assert _is_editable_installed_correctly(project_name, project_dir, _is_mixed_project(project_name))
 
     output2, duration2 = run_python_code(check_installed)
     assert "SUCCESS" in output2
@@ -263,13 +266,13 @@ def test_import_editable_installed_rebuild(workspace: Path, project_name: str, i
 
     assert duration2 < duration1
 
-    assert _is_editable_installed_correctly(project_name, project_dir, "mixed" in project_name)
+    assert _is_editable_installed_correctly(project_name, project_dir, _is_mixed_project(project_name))
 
 
 @pytest.mark.parametrize(
     "project_name",
     # path dependencies tested separately
-    sorted(set(mixed_test_crate_names()) - {"pyo3-mixed-with-path-dep"}),
+    sorted(set(mixed_test_crate_names()) - {"cffi-mixed-with-path-dep"}),
 )
 def test_import_editable_installed_mixed_missing(workspace: Path, project_name: str) -> None:
     """This test ensures that editable installed mixed projects are rebuilt if they are imported
@@ -287,7 +290,7 @@ def test_import_editable_installed_mixed_missing(workspace: Path, project_name: 
     project_backup_dir = _get_project_copy(TEST_CRATES_DIR / project_name, workspace / f"backup_{project_name}")
 
     _install_editable(project_dir)
-    assert _is_editable_installed_correctly(project_name, project_dir, "mixed" in project_name)
+    assert _is_editable_installed_correctly(project_name, project_dir, _is_mixed_project(project_name))
 
     check_installed = TEST_CRATES_DIR / project_name / "check_installed/check_installed.py"
 
@@ -444,7 +447,7 @@ def test_rebuild_on_change_to_path_dependency(workspace: Path) -> None:
     """This test ensures that the imported project is rebuilt if any of its path
     dependencies are edited.
     """
-    project_name = "pyo3-mixed-with-path-dep"
+    project_name = "cffi-mixed-with-path-dep"
     _uninstall(project_name)
 
     project_dir = _get_project_copy(TEST_CRATES_DIR / project_name, workspace / project_name)
@@ -457,12 +460,12 @@ def test_rebuild_on_change_to_path_dependency(workspace: Path) -> None:
     check_installed = "{}\n{}".format(
         IMPORT_HOOK_HEADER,
         dedent("""\
-        import pyo3_mixed_with_path_dep
+        import cffi_mixed_with_path_dep
 
-        assert pyo3_mixed_with_path_dep.get_42() == 42, 'get_42 did not return 42'
+        assert cffi_mixed_with_path_dep.lib.add_21(21) == 42, 'add_21 did not return 42'
 
-        print('21 is half 42:', pyo3_mixed_with_path_dep.is_half(21, 42))
-        print('21 is half 63:', pyo3_mixed_with_path_dep.is_half(21, 63))
+        print('21 is half 42:', cffi_mixed_with_path_dep.lib.is_half(21, 42))
+        print('21 is half 63:', cffi_mixed_with_path_dep.lib.is_half(21, 63))
         """),
     )
 
@@ -552,7 +555,9 @@ def test_low_resolution_mtime(workspace: Path) -> None:
 
     def set_mtimes_equal() -> None:
         s = DefaultProjectFileSearcher()
-        oldest_package_path = min((p for p in s.get_installation_paths(package_path)), key=lambda p: p.stat().st_mtime)
+        oldest_package_path = min(
+            (p for p in s.get_installation_paths([package_path])), key=lambda p: p.stat().st_mtime
+        )
         times = get_file_times(oldest_package_path)
         set_file_times_recursive(package_path, times)
         set_file_times_recursive(source_root, times)
@@ -1204,10 +1209,10 @@ class TestDefaultProjectFileSearcher:
                 source_excluded_dir_markers=set(),
                 source_excluded_file_extensions=set(),
             )
-            assert list(s.get_source_paths(workspace, [], workspace / "missing")) == []
+            assert list(s.get_source_paths(workspace, [], [workspace / "missing"])) == []
             extension_dir = workspace / "extension"
             extension_dir.mkdir()
-            assert list(s.get_source_paths(workspace, [], extension_dir)) == []
+            assert list(s.get_source_paths(workspace, [], [extension_dir])) == []
 
         def test_missing_paths(self, workspace: Path) -> None:
             s = DefaultProjectFileSearcher(
@@ -1217,10 +1222,61 @@ class TestDefaultProjectFileSearcher:
             )
             (workspace / "extension").touch()
             with pytest.raises(FileNotFoundError):
-                list(s.get_source_paths(workspace, [workspace / "missing"], workspace / "extension"))
+                list(s.get_source_paths(workspace, [workspace / "missing"], [workspace / "extension"]))
 
             with pytest.raises(FileNotFoundError):
-                list(s.get_source_paths(workspace / "missing", [], workspace / "extension"))
+                list(s.get_source_paths(workspace / "missing", [], [workspace / "extension"]))
+
+        def test_excluded_dir_names(self, workspace: Path) -> None:
+            s = DefaultProjectFileSearcher(
+                source_excluded_dir_names={"data"},
+                source_excluded_dir_markers=set(),
+                source_excluded_file_extensions=set(),
+            )
+            (workspace / "src").mkdir()
+            (workspace / "src/source_file.rs").touch()
+            (workspace / "src/data").mkdir()
+            (workspace / "src/data/data.rs").touch()
+            (workspace / "src/data/subdir").mkdir()
+            (workspace / "src/data/subdir/more_data.rs").touch()
+
+            paths = set(s.get_source_paths(workspace, [], [workspace / "extension_module"]))
+            assert paths == {workspace / "src/source_file.rs"}
+
+        def test_excluded_dir_markers(self, workspace: Path) -> None:
+            s = DefaultProjectFileSearcher(
+                source_excluded_dir_names=set(),
+                source_excluded_dir_markers={".excluded"},
+                source_excluded_file_extensions=set(),
+            )
+            (workspace / "src").mkdir()
+            (workspace / "src/source_file.rs").touch()
+            (workspace / "src/data").mkdir()
+            (workspace / "src/data/data.rs").touch()
+            (workspace / "src/data/subdir").mkdir()
+            (workspace / "src/data/subdir/more_data.rs").touch()
+
+            paths = set(s.get_source_paths(workspace, [], [workspace / "extension_module"]))
+            assert paths == {
+                workspace / "src/source_file.rs",
+                workspace / "src/data/data.rs",
+                workspace / "src/data/subdir/more_data.rs",
+            }
+
+            (workspace / "src/data/.excluded").touch()
+
+            paths = set(s.get_source_paths(workspace, [], [workspace / "extension_module"]))
+            assert paths == {workspace / "src/source_file.rs"}
+
+            (workspace / "src/data/.excluded").unlink()
+            (workspace / "src/data/.excluded").mkdir()
+
+            paths = set(s.get_source_paths(workspace, [], [workspace / "extension_module"]))
+            assert paths == {
+                workspace / "src/source_file.rs",
+                workspace / "src/data/data.rs",
+                workspace / "src/data/subdir/more_data.rs",
+            }
 
         def test_simple(self, workspace: Path) -> None:
             s = DefaultProjectFileSearcher(
@@ -1233,14 +1289,14 @@ class TestDefaultProjectFileSearcher:
             source_file_path = src_dir / "source_file.rs"
             source_file_path.touch()
             (workspace / "extension_module").touch()
-            paths = set(s.get_source_paths(workspace, [], workspace / "extension_module"))
+            paths = set(s.get_source_paths(workspace, [], [workspace / "extension_module"]))
             assert paths == {source_file_path}
 
             (workspace / "extension_module").unlink()
             (workspace / "extension_module").mkdir()
             (workspace / "extension_module/stuff").touch()
 
-            paths = set(s.get_source_paths(workspace, [], workspace / "extension_module"))
+            paths = set(s.get_source_paths(workspace, [], [workspace / "extension_module"]))
             assert paths == {source_file_path}
 
             s = DefaultProjectFileSearcher(
@@ -1248,7 +1304,7 @@ class TestDefaultProjectFileSearcher:
                 source_excluded_dir_markers=set(),
                 source_excluded_file_extensions=set(),
             )
-            paths = set(s.get_source_paths(workspace, [], workspace / "extension_module"))
+            paths = set(s.get_source_paths(workspace, [], [workspace / "extension_module"]))
             assert paths == set()
 
         def test_simple_path_dep(self, workspace: Path) -> None:
@@ -1270,7 +1326,7 @@ class TestDefaultProjectFileSearcher:
                 source_excluded_dir_markers=set(),
                 source_excluded_file_extensions=set(),
             )
-            paths = set(s.get_source_paths(project_a, [project_b], extension_dir))
+            paths = set(s.get_source_paths(project_a, [project_b], [extension_dir]))
             assert paths == {project_a / "source.py", project_b / "source.py", project_b / "__pycache__/source.pyc"}
 
             s = DefaultProjectFileSearcher(
@@ -1278,7 +1334,7 @@ class TestDefaultProjectFileSearcher:
                 source_excluded_dir_markers=set(),
                 source_excluded_file_extensions=set(),
             )
-            paths = set(s.get_source_paths(project_a, [project_b], extension_dir))
+            paths = set(s.get_source_paths(project_a, [project_b], [extension_dir]))
             assert paths == {project_a / "source.py", project_b / "source.py"}
 
             s = DefaultProjectFileSearcher(
@@ -1286,7 +1342,7 @@ class TestDefaultProjectFileSearcher:
                 source_excluded_dir_markers=set(),
                 source_excluded_file_extensions={".pyc"},
             )
-            paths = set(s.get_source_paths(project_a, [project_b], extension_dir))
+            paths = set(s.get_source_paths(project_a, [project_b], [extension_dir]))
             assert paths == {project_a / "source.py", project_b / "source.py"}
 
         def test_extension_outside_project_source(self, tmp_path: Path) -> None:
@@ -1304,7 +1360,7 @@ class TestDefaultProjectFileSearcher:
                 source_excluded_dir_markers=set(),
                 source_excluded_file_extensions=set(),
             )
-            paths = set(s.get_source_paths(project_dir, [], extension_path))
+            paths = set(s.get_source_paths(project_dir, [], [extension_path]))
             assert paths == {project_dir / "source"}
 
     def test_get_installation_paths(self, workspace: Path) -> None:
@@ -1313,8 +1369,8 @@ class TestDefaultProjectFileSearcher:
             source_excluded_dir_markers=set(),
             source_excluded_file_extensions={".so"},
         )
-        assert set(s.get_installation_paths(workspace)) == set()
-        assert set(s.get_installation_paths(workspace / "missing")) == set()
+        assert set(s.get_installation_paths([workspace])) == set()
+        assert set(s.get_installation_paths([workspace / "missing"])) == set()
 
         (workspace / "extension.so").touch()
         (workspace / "misc").touch()
@@ -1326,8 +1382,8 @@ class TestDefaultProjectFileSearcher:
         (workspace / "__pycache__").mkdir()
         (workspace / "__pycache__/__init__.pyc").touch()
 
-        assert set(s.get_installation_paths(workspace / "extension.so")) == {workspace / "extension.so"}
-        assert set(s.get_installation_paths(workspace)) == {
+        assert set(s.get_installation_paths([workspace / "extension.so"])) == {workspace / "extension.so"}
+        assert set(s.get_installation_paths([workspace])) == {
             workspace / "extension.so",
             workspace / "misc",
             workspace / "subdir/file.py",
@@ -1419,17 +1475,41 @@ def test_non_directory_in_search_path(tmp_path: Path) -> None:
         assert not file_in_sys_path, "sys.path should only contain the script file path on Windows"
 
 
+def _get_package_name(project_name: str) -> str:
+    """Get the actual package name for a test crate.
+
+    For most crates, the package name is derived from the directory name (with hyphens replaced by underscores).
+    However, some crates (like uniffi-multiple-crates) have package names that differ from their directory names.
+    This function looks up the correct name from resolved_packages().
+    """
+    resolved = resolved_packages().get(project_name)
+    if resolved is not None and resolved.module_full_name:
+        # module_full_name is the full dotted module name (e.g. "a" or "cffi_mixed.rust_module.rust")
+        # The top-level module name is what the import hook uses in its log messages
+        return resolved.module_full_name.split(".")[0]
+    return with_underscores(project_name)
+
+
 def _up_to_date_message(project_name: str) -> str:
-    return f'package up to date: "{with_underscores(project_name)}"'
+    return f'package up to date: "{_get_package_name(project_name)}"'
 
 
 def _rebuilt_message(project_name: str) -> str:
-    return f'rebuilt and loaded package "{with_underscores(project_name)}"'
+    return f'rebuilt and loaded package "{_get_package_name(project_name)}"'
 
 
 def _uninstall(project_name: str) -> None:
     installer = PackageInstaller.from_env()
-    installer.uninstall(project_name)
+    installer.uninstall(_get_package_name(project_name))
+
+
+def _is_mixed_project(project_name: str) -> bool:
+    """
+    Check if a project is a mixed project (has a Python module directory alongside Rust code).
+
+    Mixed projects and bin projects with Python modules both install .pth files.
+    """
+    return "mixed" in project_name or "bin-" in project_name
 
 
 def _install_editable(project_dir: Path) -> None:
@@ -1443,6 +1523,8 @@ def _install_editable(project_dir: Path) -> None:
     cmd = [maturin_path, "develop"]
     if PackageInstallerBackend.from_env() == PackageInstallerBackend.UV:
         cmd.append("--uv")
+    if has_experimental_inspect(project_dir):
+        cmd.append("--generate-stubs")
     subprocess.check_call(cmd, cwd=project_dir, env=env)
 
 
@@ -1453,12 +1535,12 @@ def _install_non_editable(project_dir: Path) -> None:
 
 
 def _is_installed_as_pth(project_name: str) -> bool:
-    package_name = with_underscores(project_name)
+    package_name = _get_package_name(project_name)
     return any((Path(path) / f"{package_name}.pth").exists() for path in site.getsitepackages())
 
 
 def _is_installed_editable_with_direct_url(project_name: str, project_dir: Path) -> bool:
-    package_name = with_underscores(project_name)
+    package_name = _get_package_name(project_name)
     for path in site.getsitepackages():
         linked_path, is_editable = _load_dist_info(Path(path), package_name)
         if linked_path == project_dir:
