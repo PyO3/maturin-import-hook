@@ -11,6 +11,8 @@ from pathlib import Path
 
 from runner import VirtualEnv
 
+from tests.test_import_hook.venv import PackageInstallerBackend
+
 script_dir = Path(__file__).resolve().parent
 repo_root = script_dir.parent
 
@@ -78,9 +80,9 @@ def create_benchmark_environment(root: Path, config: BenchmarkConfig) -> None:
 
     log.info("creating benchmark environment at %s", root)
     root.mkdir(parents=True, exist_ok=False)
-    venv = VirtualEnv.create(root / "venv", Path(sys.executable))
+    venv = VirtualEnv.create(root / "venv", Path(sys.executable), PackageInstallerBackend.UV, offline=False)
 
-    venv.install_editable_package(repo_root)
+    venv.installer.install(repo_root, editable=True)
 
     python_package_names = []
     python_package_paths = []

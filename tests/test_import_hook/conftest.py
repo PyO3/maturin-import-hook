@@ -11,12 +11,31 @@ from maturin_import_hook._building import get_default_build_dir
 
 from .common import CLEAR_WORKSPACE
 
+
+def _check_shared_build_dir() -> None:
+    """Assert that the build directory is absolute.
+
+    Tests that spawn subprocesses (via run_python_code) need a shared build directory
+    that resolves to the same location regardless of the subprocess's working directory.
+    A relative MATURIN_BUILD_DIR would resolve differently in each subprocess,
+    causing build status files to be lost.
+    """
+    build_dir = get_default_build_dir()
+    assert build_dir.is_absolute(), (
+        "MATURIN_BUILD_DIR must be an absolute path in order for tests with "
+        "multiple builds to share the build directory"
+    )
+
+
 reset_logger()  # so that logs can be captured for testing
 logging.basicConfig(format="[%(name)s] [%(levelname)s] %(message)s", level=logging.DEBUG)
 
 log = logging.getLogger(__name__)
 
+
 log.info("running tests with %s", sys.executable)
+
+_check_shared_build_dir()
 
 
 @pytest.fixture

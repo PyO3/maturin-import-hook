@@ -36,6 +36,8 @@ class TestOptions:
     html_report: bool
     notify: bool
     clear_workspace: bool
+    clear_workspace_ask_confirmation: bool
+    offline: bool
 
 
 def _run_tests_serial(
@@ -49,7 +51,8 @@ def _run_tests_serial(
     python = python.resolve()
     if workspace.exists() and options.clear_workspace:
         print(f"the workspace directory already exists: '{workspace}'")
-        input("Press enter to clear it...")
+        if options.clear_workspace_ask_confirmation:
+            input("Press enter to clear it...")
         shutil.rmtree(workspace)
     _create_ignored_directory(workspace)
 
@@ -60,7 +63,7 @@ def _run_tests_serial(
     report_path = workspace / "report.html"
     report_path.unlink(missing_ok=True)
 
-    venv = _create_test_venv(python, workspace / "venv", options.installer_backend)
+    venv = _create_test_venv(python, workspace / "venv", options.installer_backend, offline=options.offline)
     try:
         _run_test_in_environment(venv, workspace / "cache", reports_dir / "results.xml", options)
     finally:
@@ -88,6 +91,9 @@ def _run_test_in_environment(
     cache_dir.mkdir(parents=True, exist_ok=True)
     env["MATURIN_BUILD_DIR"] = str(cache_dir / "maturin_build_cache")
     env["CARGO_TARGET_DIR"] = str(cache_dir / "target")
+    if options.offline:
+        env["CARGO_NET_OFFLINE"] = "true"
+        env["UV_OFFLINE"] = "1"
 
     env["MATURIN_IMPORT_HOOK_TEST_PACKAGE_INSTALLER"] = options.installer_backend.value
 
@@ -118,8 +124,10 @@ def _run_test_in_environment(
         sys.exit(proc.returncode)
 
 
-def _create_test_venv(python: Path, venv_dir: Path, installer_backend: PackageInstallerBackend) -> VirtualEnv:
-    venv = VirtualEnv.create(venv_dir, python, installer_backend)
+def _create_test_venv(
+    python: Path, venv_dir: Path, installer_backend: PackageInstallerBackend, *, offline: bool
+) -> VirtualEnv:
+    venv = VirtualEnv.create(venv_dir, python, installer_backend, offline=offline)
     log.info("installing test requirements into virtualenv")
     venv.installer.install_requirements_file(script_dir / "requirements.txt")
     log.info("test environment ready")
@@ -240,6 +248,17 @@ def main() -> None:
         help="re-create the workspace if it already exists",
     )
     parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="do not ask for confirmation when using --clear-workspace",
+    )
+    parser.add_argument(
+        "--offline",
+        action="store_true",
+        help="do not download rust or python packages. Must have them cached locally",
+    )
+
+    parser.add_argument(
         "test_specification", nargs="?", help="the directory, file or test to run (defaults to running all tests)"
     )
     args = parser.parse_args()
@@ -260,6 +279,8 @@ def main() -> None:
         html_report=args.html_report,
         notify=args.notify,
         clear_workspace=args.clear_workspace,
+        clear_workspace_ask_confirmation=not args.yes,
+        offline=args.offline,
     )
     _run_tests_serial(args.workspace, args.python, options)
 
