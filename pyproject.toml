@@ -6,10 +6,9 @@ authors = [
 ]
 readme = "README.md"
 version = "0.3.0"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 dependencies = [
     "filelock",
-    "tomli>=1.1.0 ; python_version<'3.11'"
 ]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
@@ -28,12 +27,17 @@ Repository = "https://github.com/PyO3/maturin-import-hook.git"
 Issues = "https://github.com/PyO3/maturin-import-hook/issues"
 Changelog = "https://github.com/PyO3/maturin-import-hook/blob/main/Changelog.md"
 
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.ruff]
 line-length = 120
-target-version = "py39"
+target-version = "py311"
 
 [tool.ruff.format]
 preview = true
@@ -69,7 +73,7 @@ ignore = [
 ]
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.11"
 strict = true
 allow_redefinition = true
 exclude = [

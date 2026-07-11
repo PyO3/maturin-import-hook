@@ -2,7 +2,6 @@ import dataclasses
 import shlex
 import site
 from pathlib import Path
-from typing import Optional
 
 from maturin_import_hook._logging import logger
 from maturin_import_hook.settings import MaturinSettings
@@ -85,7 +84,7 @@ def insert_automatic_installation(
     module_path: Path,
     uninstall_command: str,
     force: bool,
-    args: Optional[str],
+    args: str | None,
     enable_project_importer: bool,
     enable_rs_file_importer: bool,
 ) -> None:

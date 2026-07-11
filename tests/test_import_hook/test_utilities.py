@@ -343,11 +343,11 @@ def test_resolve_project(project_name: str) -> None:
 
 
 def test_resolve_invalid_project(tmp_path: Path) -> None:
-    with pytest.raises(_ProjectResolveError, match="no pyproject.toml found"):
+    with pytest.raises(_ProjectResolveError, match=r"no pyproject.toml found"):
         _resolve_project(tmp_path)
 
     (tmp_path / "pyproject.toml").write_text("~not TOML~")
-    with pytest.raises(_ProjectResolveError, match="pyproject.toml failed to parse as TOML: .*"):
+    with pytest.raises(_ProjectResolveError, match=r"pyproject.toml failed to parse as TOML: .*"):
         _resolve_project(tmp_path)
 
     (tmp_path / "pyproject.toml").write_text("")
@@ -358,11 +358,11 @@ def test_resolve_invalid_project(tmp_path: Path) -> None:
 
     (tmp_path / "pyproject.toml").write_text("[build-system]\nrequires = []")
 
-    with pytest.raises(_ProjectResolveError, match="no Cargo.toml found"):
+    with pytest.raises(_ProjectResolveError, match=r"no Cargo.toml found"):
         _resolve_project(tmp_path)
 
     (tmp_path / "Cargo.toml").write_text("~not TOML~")
-    with pytest.raises(_ProjectResolveError, match="Cargo.toml failed to parse as TOML: .*"):
+    with pytest.raises(_ProjectResolveError, match=r"Cargo.toml failed to parse as TOML: .*"):
         _resolve_project(tmp_path)
 
     (tmp_path / "Cargo.toml").write_text("")

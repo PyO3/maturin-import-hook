@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 import logging
 import random
@@ -24,7 +26,7 @@ class BenchmarkConfig:
     num_python_editable_packages: int
 
     @staticmethod
-    def default() -> "BenchmarkConfig":
+    def default() -> BenchmarkConfig:
         return BenchmarkConfig(
             seed=0,
             filename_length=10,

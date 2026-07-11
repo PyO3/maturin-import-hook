@@ -1,4 +1,4 @@
-# ruff: noqa: INP001
+# ruff: noqa: INP001, PLC0415
 import importlib
 import importlib.machinery
 import logging

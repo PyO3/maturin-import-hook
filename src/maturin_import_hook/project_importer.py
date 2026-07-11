@@ -18,7 +18,7 @@ from functools import lru_cache
 from importlib.machinery import ExtensionFileLoader, ModuleSpec, PathFinder
 from pathlib import Path
 from types import ModuleType
-from typing import ClassVar, Optional, Union
+from typing import ClassVar
 
 from maturin_import_hook._building import (
     BuildCache,
@@ -73,10 +73,10 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
     def __init__(
         self,
         *,
-        settings: Optional[MaturinSettings] = None,
-        file_searcher: Optional[ProjectFileSearcher] = None,
-        build_dir: Optional[Path] = None,
-        lock_timeout_seconds: Optional[float] = 120,
+        settings: MaturinSettings | None = None,
+        file_searcher: ProjectFileSearcher | None = None,
+        build_dir: Path | None = None,
+        lock_timeout_seconds: float | None = 120,
         enable_reloading: bool = True,
         enable_automatic_installation: bool = False,
         force_rebuild: bool = False,
@@ -90,7 +90,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
         self._enable_automatic_installation = enable_automatic_installation
         self._force_rebuild = force_rebuild
         self._show_warnings = show_warnings
-        self._maturin_path: Optional[Path] = None
+        self._maturin_path: Path | None = None
         self._reload_tmp_path = LazySessionTemporaryDirectory(prefix=type(self).__name__)
 
     def get_settings(self, module_path: str, source_path: Path) -> MaturinSettings:
@@ -112,9 +112,9 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
     def find_spec(
         self,
         fullname: str,
-        path: Optional[Sequence[Union[str, bytes]]] = None,
-        target: Optional[ModuleType] = None,
-    ) -> Optional[ModuleSpec]:
+        path: Sequence[str | bytes] | None = None,
+        target: ModuleType | None = None,
+    ) -> ModuleSpec | None:
         is_top_level_import = path is None
         if not is_top_level_import:
             return None
@@ -221,7 +221,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
         self,
         package_name: str,
         project_dir: Path,
-    ) -> tuple[Optional[ModuleSpec], bool]:
+    ) -> tuple[ModuleSpec | None, bool]:
         resolved = self._resolver.resolve(project_dir)
         if resolved is None:
             return None, False
@@ -293,7 +293,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
         resolved: MaturinProject,
         settings: MaturinSettings,
         build_cache: LockedBuildCache,
-    ) -> tuple[Optional[ModuleSpec], Optional[str]]:
+    ) -> tuple[ModuleSpec | None, str | None]:
         """Return a spec for the package if it exists and is newer than the source
         code that it is derived from.
         """
@@ -342,7 +342,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
             logger.debug(message, prefix, module_path, maturin_output)
 
 
-def _find_spec_for_package(package_name: str) -> Optional[ModuleSpec]:
+def _find_spec_for_package(package_name: str) -> ModuleSpec | None:
     path_finder = PathFinder()
     spec = path_finder.find_spec(package_name)
     if spec is not None:
@@ -383,14 +383,14 @@ def _is_editable_installed_package(project_dir: Path, package_name: str) -> bool
 
 
 @lru_cache(maxsize=4096)
-def _find_maturin_project_above(path: Path) -> Optional[Path]:
+def _find_maturin_project_above(path: Path) -> Path | None:
     for search_path in itertools.chain((path,), path.parents):
         if is_maybe_maturin_project(search_path):
             return search_path
     return None
 
 
-def _find_dist_info_path(directory: Path, package_name: str) -> Optional[Path]:
+def _find_dist_info_path(directory: Path, package_name: str) -> Path | None:
     try:
         names = [item.name for item in directory.iterdir()]
     except (FileNotFoundError, NotADirectoryError):
@@ -401,9 +401,7 @@ def _find_dist_info_path(directory: Path, package_name: str) -> Optional[Path]:
     return None
 
 
-def _load_dist_info(
-    path: Path, package_name: str, *, require_project_target: bool = True
-) -> tuple[Optional[Path], bool]:
+def _load_dist_info(path: Path, package_name: str, *, require_project_target: bool = True) -> tuple[Path | None, bool]:
     dist_info_path = _find_dist_info_path(path, package_name)
     if dist_info_path is None:
         return None, False
@@ -436,7 +434,7 @@ def _uri_to_path(uri: str) -> Path:
     return Path(os.path.normpath(os.path.join(host, path)))  # noqa: PTH118
 
 
-def _find_installed_package_root(resolved: MaturinProject, package_spec: ModuleSpec) -> Optional[Path]:
+def _find_installed_package_root(resolved: MaturinProject, package_spec: ModuleSpec) -> Path | None:
     """Find the root of the files that change each time the project is rebuilt:
     - for mixed projects: the root directory or file of the extension module inside the source tree
     - for pure projects: the root directory of the installed package.
@@ -455,7 +453,7 @@ def _find_installed_package_root(resolved: MaturinProject, package_spec: ModuleS
         return None
 
 
-def _find_extension_module(dir_path: Path, module_name: str, *, require: bool = False) -> Optional[Path]:
+def _find_extension_module(dir_path: Path, module_name: str, *, require: bool = False) -> Path | None:
     if (dir_path / module_name / "__init__.py").exists():
         return dir_path / module_name
 
@@ -517,9 +515,9 @@ class DefaultProjectFileSearcher(ProjectFileSearcher):
     def __init__(
         self,
         *,
-        source_excluded_dir_names: Optional[set[str]] = None,
-        source_excluded_dir_markers: Optional[set[str]] = None,
-        source_excluded_file_extensions: Optional[set[str]] = None,
+        source_excluded_dir_names: set[str] | None = None,
+        source_excluded_dir_markers: set[str] | None = None,
+        source_excluded_file_extensions: set[str] | None = None,
     ) -> None:
         """
         Args:
@@ -607,18 +605,18 @@ class DefaultProjectFileSearcher(ProjectFileSearcher):
                 dirs.clear()  # do not recurse further into this directory
 
 
-IMPORTER: Optional[MaturinProjectImporter] = None
+IMPORTER: MaturinProjectImporter | None = None
 
 
 def install(
     *,
-    settings: Optional[MaturinSettings] = None,
-    build_dir: Optional[Path] = None,
+    settings: MaturinSettings | None = None,
+    build_dir: Path | None = None,
     enable_reloading: bool = True,
     force_rebuild: bool = False,
-    lock_timeout_seconds: Optional[float] = 120,
+    lock_timeout_seconds: float | None = 120,
     show_warnings: bool = True,
-    file_searcher: Optional[ProjectFileSearcher] = None,
+    file_searcher: ProjectFileSearcher | None = None,
     enable_automatic_installation: bool = False,
 ) -> MaturinProjectImporter:
     """Install an import hook for automatically rebuilding editable installed maturin projects.

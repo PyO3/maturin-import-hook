@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import hashlib
 import json
 import logging
@@ -8,18 +10,21 @@ import shutil
 import subprocess
 import sys
 import zipfile
-from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from operator import itemgetter
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any
 
 import filelock
 
 from maturin_import_hook._logging import logger
 from maturin_import_hook.error import ImportHookError, MaturinError
-from maturin_import_hook.settings import MaturinSettings
+
+if TYPE_CHECKING:
+    from collections.abc import Generator, Iterable
+
+    from maturin_import_hook.settings import MaturinSettings
 
 
 @dataclass
@@ -43,7 +48,7 @@ class BuildStatus:
         }
 
     @staticmethod
-    def from_json(json_data: dict[Any, Any]) -> Optional["BuildStatus"]:
+    def from_json(json_data: dict[Any, Any]) -> BuildStatus | None:
         try:
             return BuildStatus(
                 build_mtime=json_data["build_mtime"],
@@ -70,7 +75,7 @@ class LockedBuildCache:
         with self._build_status_path(build_status.source_path).open("w") as f:
             json.dump(build_status.to_json(), f, indent="  ")
 
-    def get_build_status(self, source_path: Path) -> Optional[BuildStatus]:
+    def get_build_status(self, source_path: Path) -> BuildStatus | None:
         try:
             with self._build_status_path(source_path).open("r") as f:
                 return BuildStatus.from_json(json.load(f))
@@ -83,7 +88,7 @@ class LockedBuildCache:
 
 
 class BuildCache:
-    def __init__(self, build_dir: Optional[Path], lock_timeout_seconds: Optional[float]) -> None:
+    def __init__(self, build_dir: Path | None, lock_timeout_seconds: float | None) -> None:
         self._build_dir = build_dir if build_dir is not None else get_default_build_dir()
         self._lock = filelock.FileLock(
             self._build_dir / "lock", timeout=-1 if lock_timeout_seconds is None else lock_timeout_seconds
@@ -96,7 +101,7 @@ class BuildCache:
 
 
 @contextmanager
-def _acquire_lock(lock: filelock.FileLock) -> Generator[None, None, None]:
+def _acquire_lock(lock: filelock.BaseFileLock) -> Generator[None, None, None]:
     try:
         try:
             with lock.acquire(blocking=False):
@@ -245,7 +250,7 @@ def build_unpacked_wheel(maturin_path: Path, manifest_path: Path, output_dir: Pa
     return output
 
 
-def _find_single_file(dir_path: Path, extension: Optional[str]) -> Optional[Path]:
+def _find_single_file(dir_path: Path, extension: str | None) -> Path | None:
     if dir_path.exists():
         candidate_files = [p for p in dir_path.iterdir() if extension is None or p.suffix == extension]
     else:
@@ -261,8 +266,8 @@ def maturin_output_has_warnings(output: str) -> bool:
 class Freshness:
     is_fresh: bool
     reason: str
-    oldest_installed_path: Optional[Path]
-    newest_source_path: Optional[Path]
+    oldest_installed_path: Path | None
+    newest_source_path: Path | None
 
 
 def get_installation_freshness(
@@ -326,7 +331,7 @@ def get_installation_freshness(
         return Freshness(True, "", oldest_installed_path, newest_source_path)
 
 
-def get_installation_mtime(installed_paths: Iterable[Path]) -> Optional[float]:
+def get_installation_mtime(installed_paths: Iterable[Path]) -> float | None:
     try:
         installation_mtime = min(path.stat().st_mtime for path in installed_paths)
     except ValueError:

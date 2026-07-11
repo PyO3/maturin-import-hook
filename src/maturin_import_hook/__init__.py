@@ -1,6 +1,5 @@
 import os
 from pathlib import Path
-from typing import Optional
 
 from maturin_import_hook import project_importer, rust_file_importer
 from maturin_import_hook._logging import logger, reset_logger
@@ -14,12 +13,12 @@ def install(
     enable_project_importer: bool = True,
     enable_rs_file_importer: bool = True,
     enable_reloading: bool = True,
-    settings: Optional[MaturinSettings] = None,
-    build_dir: Optional[Path] = None,
+    settings: MaturinSettings | None = None,
+    build_dir: Path | None = None,
     force_rebuild: bool = False,
-    lock_timeout_seconds: Optional[float] = 120,
+    lock_timeout_seconds: float | None = 120,
     show_warnings: bool = True,
-    file_searcher: Optional[project_importer.ProjectFileSearcher] = None,
+    file_searcher: project_importer.ProjectFileSearcher | None = None,
     enable_automatic_installation: bool = False,
 ) -> None:
     """Install import hooks for automatically rebuilding and importing maturin projects or .rs files.

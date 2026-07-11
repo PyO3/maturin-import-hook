@@ -20,11 +20,10 @@ on:
         default: '3.13'
         options:
         - 'all'
-        - '3.9'
+        - '3.11'
         - '3.13t'
         - '3.13'
-        - 'pypy3.9'
-        - 'pypy3.10'
+        - 'pypy3.11'
       test_specification:
         type: string
         description: Specification for the tests to run
@@ -57,11 +56,10 @@ jobs:
         - macos-14
         - windows-latest
       PYTHON_VERSION: |
-        - '3.9'
+        - '3.11'
         - '3.13t'
         - '3.13'
-        - 'pypy3.9'
-        - 'pypy3.10'
+        - 'pypy3.11'
     steps:
       - uses: actions/setup-node@v4
         with:

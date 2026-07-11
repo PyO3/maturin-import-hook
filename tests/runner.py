@@ -10,7 +10,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-# ruff: noqa: INP001, E402
+# ruff: noqa: E402
 
 
 script_dir = Path(__file__).resolve().parent
@@ -239,7 +239,6 @@ def main() -> None:
         action="store_true",
         help="re-create the workspace if it already exists",
     )
-
     parser.add_argument(
         "test_specification", nargs="?", help="the directory, file or test to run (defaults to running all tests)"
     )
