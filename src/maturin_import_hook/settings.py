@@ -2,7 +2,7 @@ import argparse
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import IO, Any, Literal, Optional, Union
+from typing import IO, Any, Literal
 
 __all__ = [
     "MaturinSettings",
@@ -16,28 +16,28 @@ class MaturinSettings:
     release: bool = False
     strip: bool = False
     quiet: bool = False
-    jobs: Optional[int] = None
-    profile: Optional[str] = None
-    features: Optional[list[str]] = None
+    jobs: int | None = None
+    profile: str | None = None
+    features: list[str] | None = None
     all_features: bool = False
     no_default_features: bool = False
-    target: Optional[str] = None
+    target: str | None = None
     ignore_rust_version: bool = False
-    color: Optional[bool] = None
+    color: bool | None = None
     frozen: bool = False
     locked: bool = False
     offline: bool = False
-    config: Optional[dict[str, str]] = None
-    unstable_flags: Optional[list[str]] = None
+    config: dict[str, str] | None = None
+    unstable_flags: list[str] | None = None
     verbose: int = 0
-    rustc_flags: Optional[list[str]] = None
+    rustc_flags: list[str] | None = None
 
     # `maturin build` specific
-    auditwheel: Optional[str] = None
+    auditwheel: str | None = None
     zig: bool = False
 
     # `maturin develop` specific
-    extras: Optional[list[str]] = None
+    extras: list[str] | None = None
     uv: bool = False
     skip_install: bool = False
 
@@ -145,7 +145,7 @@ class MaturinSettings:
         parser.add_argument("--target")
         parser.add_argument("--ignore-rust-version", action="store_true")
 
-        def parse_color(arg: str) -> Optional[bool]:
+        def parse_color(arg: str) -> bool | None:
             if arg == "always":
                 return True
             elif arg == "never":
@@ -181,10 +181,10 @@ class NonExitingArgumentParser(argparse.ArgumentParser):
         msg = "argument parser error"
         raise ValueError(msg)
 
-    def exit(self, status: int = 0, message: Optional[str] = None) -> None:  # type: ignore[override]
+    def exit(self, status: int = 0, message: str | None = None) -> None:  # type: ignore[override]
         pass
 
-    def _print_message(self, message: str, file: Optional[IO[str]] = None) -> None:  # type: ignore[override]
+    def _print_message(self, message: str, file: IO[str] | None = None) -> None:  # type: ignore[override]
         pass
 
 
@@ -195,8 +195,8 @@ class _KeyValueAction(argparse.Action):
         self,
         parser: argparse.ArgumentParser,
         namespace: argparse.Namespace,
-        values: Union[str, Sequence[Any], None],
-        option_string: Union[str, Sequence[Any], None] = None,
+        values: str | Sequence[Any] | None,
+        option_string: str | Sequence[Any] | None = None,
     ) -> None:
         if values is None:
             values = []

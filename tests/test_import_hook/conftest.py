@@ -16,7 +16,6 @@ logging.basicConfig(format="[%(name)s] [%(levelname)s] %(message)s", level=loggi
 
 log = logging.getLogger(__name__)
 
-
 log.info("running tests with %s", sys.executable)
 
 

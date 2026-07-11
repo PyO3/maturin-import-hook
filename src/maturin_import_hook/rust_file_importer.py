@@ -13,7 +13,7 @@ from collections.abc import Iterator, Sequence
 from importlib.machinery import ExtensionFileLoader, ModuleSpec
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 from maturin_import_hook._building import (
     BuildCache,
@@ -40,11 +40,11 @@ class MaturinRustFileImporter(importlib.abc.MetaPathFinder):
     def __init__(
         self,
         *,
-        settings: Optional[MaturinSettings] = None,
-        build_dir: Optional[Path] = None,
+        settings: MaturinSettings | None = None,
+        build_dir: Path | None = None,
         enable_reloading: bool = True,
         force_rebuild: bool = False,
-        lock_timeout_seconds: Optional[float] = 120,
+        lock_timeout_seconds: float | None = 120,
         show_warnings: bool = True,
     ) -> None:
         self._force_rebuild = force_rebuild
@@ -53,7 +53,7 @@ class MaturinRustFileImporter(importlib.abc.MetaPathFinder):
         self._settings = settings
         self._build_cache = BuildCache(build_dir, lock_timeout_seconds)
         self._show_warnings = show_warnings
-        self._maturin_path: Optional[Path] = None
+        self._maturin_path: Path | None = None
         self._reload_tmp_path = LazySessionTemporaryDirectory(prefix=type(self).__name__)
 
     def get_settings(self, module_path: str, source_path: Path) -> MaturinSettings:
@@ -81,7 +81,7 @@ class MaturinRustFileImporter(importlib.abc.MetaPathFinder):
         if project_dir.exists():
             shutil.rmtree(project_dir)
 
-        success, output = run_maturin(self.find_maturin(), ["new", "--bindings", "pyo3", str(project_dir)])
+        success, _output = run_maturin(self.find_maturin(), ["new", "--bindings", "pyo3", str(project_dir)])
         if not success:
             msg = "Failed to generate project for rust file"
             raise ImportHookError(msg)
@@ -102,9 +102,9 @@ class MaturinRustFileImporter(importlib.abc.MetaPathFinder):
     def find_spec(
         self,
         fullname: str,
-        path: Optional[Sequence[Union[str, bytes]]] = None,
-        target: Optional[ModuleType] = None,
-    ) -> Optional[ModuleSpec]:
+        path: Sequence[str | bytes] | None = None,
+        target: ModuleType | None = None,
+    ) -> ModuleSpec | None:
         already_loaded = fullname in sys.modules
         if already_loaded and not self._enable_reloading:
             return self._handle_no_reload(fullname)
@@ -149,7 +149,7 @@ class MaturinRustFileImporter(importlib.abc.MetaPathFinder):
 
         return spec
 
-    def _handle_no_reload(self, module_path: str) -> Optional[ModuleSpec]:
+    def _handle_no_reload(self, module_path: str) -> ModuleSpec | None:
         module = sys.modules[module_path]
         loader = getattr(module, "__loader__", None)
         if isinstance(loader, _RustFileExtensionFileLoader):
@@ -190,9 +190,7 @@ class MaturinRustFileImporter(importlib.abc.MetaPathFinder):
 
         return reloaded_spec
 
-    def _import_rust_file(
-        self, module_path: str, module_name: str, file_path: Path
-    ) -> tuple[Optional[ModuleSpec], bool]:
+    def _import_rust_file(self, module_path: str, module_name: str, file_path: Path) -> tuple[ModuleSpec | None, bool]:
         logger.debug('importing rust file "%s" as "%s"', file_path, module_path)
 
         with self._build_cache.lock() as build_cache:
@@ -253,7 +251,7 @@ class MaturinRustFileImporter(importlib.abc.MetaPathFinder):
         source_path: Path,
         settings: MaturinSettings,
         build_cache: LockedBuildCache,
-    ) -> tuple[Optional[ModuleSpec], Optional[str]]:
+    ) -> tuple[ModuleSpec | None, str | None]:
         """Return a spec for the given module at the given search_dir if it exists and is newer than the source
         code that it is derived from.
         """
@@ -299,7 +297,7 @@ class MaturinRustFileImporter(importlib.abc.MetaPathFinder):
             logger.debug(message, prefix, module_path, maturin_output)
 
 
-def _find_extension_module(dir_path: Path, module_name: str, *, require: bool = False) -> Optional[Path]:
+def _find_extension_module(dir_path: Path, module_name: str, *, require: bool = False) -> Path | None:
     # the suffixes include the platform tag and file extension eg '.cpython-311-x86_64-linux-gnu.so'
     for suffix in importlib.machinery.EXTENSION_SUFFIXES:
         extension_path = dir_path / f"{module_name}{suffix}"
@@ -315,7 +313,7 @@ class _RustFileExtensionFileLoader(ExtensionFileLoader):
     pass
 
 
-def _get_spec_for_extension_module(module_path: str, extension_module_path: Path) -> Optional[ModuleSpec]:
+def _get_spec_for_extension_module(module_path: str, extension_module_path: Path) -> ModuleSpec | None:
     return importlib.util.spec_from_loader(
         module_path, _RustFileExtensionFileLoader(module_path, str(extension_module_path))
     )
@@ -372,16 +370,16 @@ class _ExtensionModuleReloader(_RustFileExtensionFileLoader):
                 del sys.modules[reload_name]
 
 
-IMPORTER: Optional[MaturinRustFileImporter] = None
+IMPORTER: MaturinRustFileImporter | None = None
 
 
 def install(
     *,
-    settings: Optional[MaturinSettings] = None,
-    build_dir: Optional[Path] = None,
+    settings: MaturinSettings | None = None,
+    build_dir: Path | None = None,
     enable_reloading: bool = True,
     force_rebuild: bool = False,
-    lock_timeout_seconds: Optional[float] = 120,
+    lock_timeout_seconds: float | None = 120,
     show_warnings: bool = True,
 ) -> MaturinRustFileImporter:
     """Install the 'rust file' importer to import .rs files as though

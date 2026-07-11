@@ -2,7 +2,6 @@ import atexit
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Optional
 
 from maturin_import_hook._logging import logger
 
@@ -12,7 +11,7 @@ class LazySessionTemporaryDirectory:
 
     def __init__(self, *, prefix: str) -> None:
         self._prefix = prefix
-        self._tmp_path: Optional[Path] = None
+        self._tmp_path: Path | None = None
 
     def __del__(self) -> None:
         self._cleanup()

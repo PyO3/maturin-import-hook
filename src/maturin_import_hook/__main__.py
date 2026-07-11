@@ -6,7 +6,6 @@ import shutil
 import site
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 from maturin_import_hook import project_importer, rust_file_importer
 from maturin_import_hook._building import get_default_build_dir
@@ -106,7 +105,7 @@ def _action_site_install(
     *,
     user: bool,
     force: bool,
-    args: Optional[str],
+    args: str | None,
     enable_project_importer: bool,
     enable_rs_file_importer: bool,
 ) -> None:

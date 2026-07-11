@@ -11,12 +11,12 @@ import sys
 import sysconfig
 import tempfile
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from io import StringIO
 from pathlib import Path
-from typing import Any, Callable, Optional, TypeVar
+from typing import Any, TypeVar
 
 script_dir = Path(__file__).resolve().parent
 log = logging.getLogger(__name__)
@@ -66,10 +66,10 @@ RELOAD_SUPPORTED = platform.system() != "Windows" and sys.version_info >= (3, 9)
 @dataclass
 class ResolvedPackage:
     cargo_manifest_path: Path
-    extension_module_dir: Optional[Path]
+    extension_module_dir: Path | None
     module_full_name: str
     python_dir: Path
-    python_module: Optional[Path]
+    python_module: Path | None
 
     @staticmethod
     def from_dict(data: dict[str, Any]) -> "ResolvedPackage":
@@ -85,10 +85,10 @@ class ResolvedPackage:
         return json.dumps({k: str(v) for k, v in dataclasses.asdict(self).items()}, indent=2, sort_keys=True)
 
 
-_RESOLVED_PACKAGES: Optional[dict[str, Optional[ResolvedPackage]]] = None
+_RESOLVED_PACKAGES: dict[str, ResolvedPackage | None] | None = None
 
 
-def resolved_packages() -> dict[str, Optional[ResolvedPackage]]:
+def resolved_packages() -> dict[str, ResolvedPackage | None]:
     global _RESOLVED_PACKAGES
     if _RESOLVED_PACKAGES is None:
         with (script_dir / "../resolved.json").open() as f:
@@ -114,7 +114,7 @@ T = TypeVar("T")
 U = TypeVar("U")
 
 
-def map_optional(value: Optional[T], f: Callable[[T], U]) -> Optional[U]:
+def map_optional(value: T | None, f: Callable[[T], U]) -> U | None:
     return None if value is None else f(value)
 
 
@@ -147,9 +147,9 @@ def run_python(
     *,
     quiet: bool = False,
     expect_error: bool = False,
-    profile: Optional[Path] = None,
-    env: Optional[dict[str, Any]] = None,
-    interpreter: Optional[Path] = None,
+    profile: Path | None = None,
+    env: dict[str, Any] | None = None,
+    interpreter: Path | None = None,
 ) -> tuple[str, float]:
     start = time.perf_counter()
 
@@ -202,12 +202,12 @@ def run_python(
 def run_python_code(
     python_script: str,
     *,
-    args: Optional[list[str]] = None,
-    cwd: Optional[Path] = None,
+    args: list[str] | None = None,
+    cwd: Path | None = None,
     quiet: bool = False,
     expect_error: bool = False,
-    env: Optional[dict[str, Any]] = None,
-    interpreter: Optional[Path] = None,
+    env: dict[str, Any] | None = None,
+    interpreter: Path | None = None,
 ) -> tuple[str, float]:
     with tempfile.TemporaryDirectory("run_python_code") as tmpdir_str:
         tmpdir = Path(tmpdir_str)
@@ -243,7 +243,7 @@ def check_match(text: str, pattern: str, *, flags: int = 0) -> None:
     assert matches, f'text does not match pattern:\npattern: "{pattern}"\ntext:\n{text}'
 
 
-def get_string_between(text: str, start: str, end: str) -> Optional[str]:
+def get_string_between(text: str, start: str, end: str) -> str | None:
     start_index = text.find(start)
     if start_index == -1:
         return None
@@ -265,7 +265,7 @@ def missing_entrypoint_error_message_pattern(name: str) -> str:
 @dataclass
 class PythonProcessOutput:
     output: str
-    duration: Optional[float]
+    duration: float | None
     success: bool
 
 
@@ -318,7 +318,7 @@ def set_file_times(path: Path, times: tuple[float, float]) -> None:
 
 
 @contextmanager
-def capture_logs(log: Optional[logging.Logger] = None, level: int = logging.INFO) -> Iterator[StringIO]:
+def capture_logs(log: logging.Logger | None = None, level: int = logging.INFO) -> Iterator[StringIO]:
     out = StringIO()
     if log is None:
         log = logging.getLogger()
