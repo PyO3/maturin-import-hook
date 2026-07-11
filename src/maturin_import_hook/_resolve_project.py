@@ -112,9 +112,14 @@ class MaturinProject:
     # the path to the top level python package if the project is mixed
     python_module: Path | None
     # the location that the compiled extension module is written to when installed in editable/unpacked mode
+    # None for bin projects (no compiled extension module)
     extension_module_dir: Path | None
     # path dependencies listed in the Cargo.toml of the main project
     immediate_path_dependencies: list[Path]
+    # the maturin bindings type
+    bindings: str
+    # the names of binaries produced by this project (for bindings="bin" projects)
+    binary_names: list[str]
     # all path dependencies including transitive dependencies
     _all_path_dependencies: list[Path] | None = None
 
@@ -128,8 +133,8 @@ class MaturinProject:
 
     @property
     def is_mixed(self) -> bool:
-        """Whether the project contains both python and rust code."""
-        return self.extension_module_dir is not None
+        """Whether the project installs a .pth file (has a Python module directory alongside Rust code)."""
+        return self.extension_module_dir is not None or (self.bindings == "bin" and self.python_module is not None)
 
     @property
     def all_path_dependencies(self) -> list[Path]:
@@ -197,7 +202,11 @@ def _resolve_project(project_dir: Path) -> MaturinProject:
         msg = "could not resolve module_full_name"
         raise _ProjectResolveError(msg)
 
+    bindings = _resolve_bindings(pyproject, cargo)
+    binary_names = _resolve_binary_names(cargo, manifest_path.parent) if bindings == "bin" else []
+
     python_dir = _resolve_py_root(project_dir, pyproject)
+    python_source_explicit = pyproject.get_value(["tool", "maturin", "python-source"], str) is not None
 
     extension_module_dir: Path | None
     python_module: Path | None
@@ -205,6 +214,9 @@ def _resolve_project(project_dir: Path) -> MaturinProject:
     immediate_path_dependencies = _get_immediate_path_dependencies(manifest_path.parent, cargo)
 
     if not python_module.exists():
+        if python_source_explicit:
+            msg = f"python-source '{python_dir}' does not contain module '{module_full_name}'"
+            raise _ProjectResolveError(msg)
         extension_module_dir = None
         python_module = None
 
@@ -215,6 +227,8 @@ def _resolve_project(project_dir: Path) -> MaturinProject:
         python_module=python_module,
         extension_module_dir=extension_module_dir,
         immediate_path_dependencies=immediate_path_dependencies,
+        bindings=bindings,
+        binary_names=binary_names,
     )
 
 
@@ -275,6 +289,30 @@ def _get_immediate_path_dependencies(manifest_dir_path: Path, cargo: _TomlFile) 
     return path_dependencies
 
 
+def has_experimental_inspect(project_dir: Path) -> bool:
+    """Check if the project has the pyo3 `experimental-inspect` feature enabled.
+
+    This feature enables automatic stub generation when combined with
+    `maturin develop --generate-stubs`.
+    """
+    manifest_path = find_cargo_manifest(project_dir)
+    if manifest_path is None:
+        return False
+    try:
+        cargo = _TomlFile.load(manifest_path)
+    except tomllib.TOMLDecodeError:
+        logger.info("failed to parse '%s' as TOML", manifest_path)
+        return False
+
+    cargo_deps = cargo.get_value_or_default(["dependencies"], dict, {})
+    pyo3_dep = cargo_deps.get("pyo3")
+    if isinstance(pyo3_dep, dict):
+        features: Any = pyo3_dep.get("features", [])
+        if isinstance(features, list) and "experimental-inspect" in features:
+            return True
+    return False
+
+
 def _resolve_py_root(project_dir: Path, pyproject: _TomlFile) -> Path:
     """This follows the same logic as project_layout.rs."""
     py_root = pyproject.get_value(["tool", "maturin", "python-source"], str)
@@ -296,3 +334,64 @@ def _resolve_py_root(project_dir: Path, pyproject: _TomlFile) -> Path:
         return project_dir / "src"
     else:
         return project_dir
+
+
+def _resolve_bindings(pyproject: _TomlFile, cargo: _TomlFile) -> str:
+    """Resolve the maturin bindings type.
+
+    Matches maturin's bridge detection logic (bridge/detection.rs):
+    """
+    bindings = pyproject.get_value(["tool", "maturin", "bindings"], str)
+    if bindings is not None:
+        return bindings
+
+    cargo_deps = cargo.get_value_or_default(["dependencies"], dict, {})
+
+    if "pyo3" in cargo_deps or "pyo3-ffi" in cargo_deps:
+        return "pyo3"
+
+    if "uniffi" in cargo_deps:
+        return "uniffi"
+
+    lib = cargo.get_value(["lib"], dict)
+    if lib is not None:
+        crate_types = lib.get("crate-type")
+        if isinstance(crate_types, list) and "cdylib" in crate_types:
+            return "cffi"
+
+    bins = cargo.get_value(["bin"], list)
+    if bins is not None and len(bins) > 0:
+        return "bin"
+
+    return "pyo3"
+
+
+def _resolve_binary_names(cargo: _TomlFile, project_dir: Path) -> list[str]:
+    """Resolve binary names from Cargo.toml."""
+    bins = cargo.get_value(["bin"], list)
+    if bins is not None:
+        return [
+            str(bin_entry.get("name"))
+            for bin_entry in bins
+            if isinstance(bin_entry, dict) and bin_entry.get("name") is not None
+        ]
+
+    binary_names: list[str] = []
+    src_dir = project_dir / "src"
+    if (src_dir / "main.rs").is_file():
+        package_name = cargo.get_value(["package", "name"], str)
+        if package_name is not None:
+            binary_names.append(package_name)
+    bin_dir = src_dir / "bin"
+    if bin_dir.is_dir():
+        binary_names.extend(
+            rs_file.stem for rs_file in bin_dir.iterdir() if rs_file.is_file() and rs_file.suffix == ".rs"
+        )
+
+    if binary_names:
+        return sorted(binary_names)
+
+    package_name = cargo.get_value(["package", "name"], str)
+    if package_name is not None:
+        return [package_name]
+    return []

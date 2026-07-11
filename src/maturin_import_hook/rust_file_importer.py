@@ -337,27 +337,28 @@ class _ExtensionModuleReloader(_RustFileExtensionFileLoader):
         path: str
 
     def exec_module(self, module: ModuleType) -> None:
-        if sys.modules[self.name] is not module:
+        if sys.modules.get(self.name) is not module:
             msg = f"failed to reload {self.name}. Module not in sys.modules"
             raise ImportHookError(msg)
 
-        reload_name = f"maturin_import_hook._reload.{self.name}"
         try:
             logger.debug("creating new module then moving into %s", self.name)
 
-            loader = ExtensionFileLoader(reload_name, self.reload_path)
-            spec = importlib.util.spec_from_loader(reload_name, loader)
+            # Temporarily remove from sys.modules so module_from_spec creates a new module
+            sys.modules.pop(self.name)
+
+            loader = ExtensionFileLoader(self.name, self.reload_path)
+            spec = importlib.util.spec_from_loader(self.name, loader)
             if spec is None:
                 msg = f"failed to create spec for {self.name} during reload"
                 raise ImportHookError(msg)
 
             reloaded_module = importlib.util.module_from_spec(spec)
+            # module_from_spec doesn't call exec_module for extension modules,
+            # so we need to call it manually to run the init function
+            loader.exec_module(reloaded_module)
             if reloaded_module is module:
                 msg = f"failed to create new module for {self.name} during reload"
-                raise ImportHookError(msg)
-
-            if sys.modules[self.name] is reloaded_module:
-                msg = f"expected a new module to be created for {self.name}"
                 raise ImportHookError(msg)
 
             excluded_names = {"__name__", "__file__", "__package__", "__loader__", "__spec__"}
@@ -365,9 +366,13 @@ class _ExtensionModuleReloader(_RustFileExtensionFileLoader):
             for k, v in reloaded_module.__dict__.items():
                 if k not in excluded_names:
                     module.__dict__[k] = v
+
+            # Restore the original module object in sys.modules
+            sys.modules[self.name] = module
         finally:
-            if reload_name in sys.modules:
-                del sys.modules[reload_name]
+            # Clean up if something went wrong
+            if sys.modules.get(self.name) is not module:
+                sys.modules[self.name] = module
 
 
 IMPORTER: MaturinRustFileImporter | None = None

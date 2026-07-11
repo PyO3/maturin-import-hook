@@ -1,4 +1,5 @@
 import contextlib
+import dataclasses
 import importlib
 import importlib.abc
 import importlib.machinery
@@ -8,6 +9,7 @@ import logging
 import os
 import site
 import sys
+import sysconfig
 import tempfile
 import time
 import urllib.parse
@@ -35,6 +37,7 @@ from maturin_import_hook._logging import logger
 from maturin_import_hook._resolve_project import (
     MaturinProject,
     ProjectResolver,
+    has_experimental_inspect,
     is_maybe_maturin_project,
 )
 from maturin_import_hook.error import ImportHookError
@@ -56,13 +59,13 @@ class ProjectFileSearcher(ABC):
         self,
         project_dir: Path,
         all_path_dependencies: list[Path],
-        installed_package_root: Path,
+        installed_package_roots: list[Path],
     ) -> Iterator[Path]:
         """find the files corresponding to the source code of the given project"""
         raise NotImplementedError
 
     @abstractmethod
-    def get_installation_paths(self, installed_package_root: Path) -> Iterator[Path]:
+    def get_installation_paths(self, installed_package_roots: list[Path]) -> Iterator[Path]:
         """find the files corresponding to the installed files of the given project"""
         raise NotImplementedError
 
@@ -95,7 +98,10 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
 
     def get_settings(self, module_path: str, source_path: Path) -> MaturinSettings:
         """This method can be overridden in subclasses to customize settings for specific projects."""
-        return self._settings if self._settings is not None else MaturinSettings.default()
+        settings = self._settings if self._settings is not None else MaturinSettings.default()
+        if not settings.generate_stubs and has_experimental_inspect(source_path):
+            settings = dataclasses.replace(settings, generate_stubs=True)
+        return settings
 
     def find_maturin(self) -> Path:
         """this method can be overridden to specify an alternative maturin binary to use"""
@@ -273,11 +279,12 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
                 msg = f'cannot find package "{package_name}" after installation'
                 raise ImportHookError(msg)
 
-            installed_package_root = _find_installed_package_root(resolved, spec)
-            if installed_package_root is None:
+            installed_package_roots = _find_installed_package_roots(resolved, spec)
+            if installed_package_roots is None:
                 logger.error("could not get installed package root")
             else:
-                mtime = get_installation_mtime(self._file_searcher.get_installation_paths(installed_package_root))
+                installed_paths = self._file_searcher.get_installation_paths(installed_package_roots)
+                mtime = get_installation_mtime(installed_paths)
                 if mtime is None:
                     logger.error("could not get installed package mtime")
                 else:
@@ -306,8 +313,8 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
         if spec is None:
             return None, "package not already installed"
 
-        installed_package_root = _find_installed_package_root(resolved, spec)
-        if installed_package_root is None:
+        installed_package_roots = _find_installed_package_roots(resolved, spec)
+        if installed_package_roots is None:
             return None, "could not find installed package root"
 
         build_status = build_cache.get_build_status(project_dir)
@@ -318,9 +325,9 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
         if build_status.maturin_args != settings.to_args("develop"):
             return None, "current maturin args do not match the previous build"
 
-        installed_paths = self._file_searcher.get_installation_paths(installed_package_root)
+        installed_paths = self._file_searcher.get_installation_paths(installed_package_roots)
         source_paths = self._file_searcher.get_source_paths(
-            project_dir, resolved.all_path_dependencies, installed_package_root
+            project_dir, resolved.all_path_dependencies, installed_package_roots
         )
         freshness = get_installation_freshness(source_paths, installed_paths, build_status)
         if not freshness.is_fresh:
@@ -434,23 +441,46 @@ def _uri_to_path(uri: str) -> Path:
     return Path(os.path.normpath(os.path.join(host, path)))  # noqa: PTH118
 
 
-def _find_installed_package_root(resolved: MaturinProject, package_spec: ModuleSpec) -> Path | None:
-    """Find the root of the files that change each time the project is rebuilt:
+def _find_installed_package_roots(resolved: MaturinProject, package_spec: ModuleSpec) -> list[Path] | None:
+    """Find the roots of the files that change each time the project is rebuilt:
     - for mixed projects: the root directory or file of the extension module inside the source tree
+    - for bin projects: the installed binaries in the venv bin/scripts directory
     - for pure projects: the root directory of the installed package.
+
+    Returns None if no installation roots could be found.
     """
-    if resolved.extension_module_dir is not None:
+    roots: list[Path] = []
+    if resolved.bindings == "bin" and resolved.binary_names:
+        roots.extend(_find_installed_binaries(resolved.binary_names))
+    elif resolved.extension_module_dir is not None:
         installed_package_root = _find_extension_module(
             resolved.extension_module_dir, resolved.module_name, require=False
         )
         if installed_package_root is None:
             logger.debug('no extension module found in "%s"', resolved.extension_module_dir)
-        return installed_package_root
+        else:
+            roots.append(installed_package_root)
     elif package_spec.origin is not None:
-        return Path(package_spec.origin).parent
+        roots.append(Path(package_spec.origin).parent)
     else:
         logger.debug("could not find installation location for pure package")
+
+    if not roots:
         return None
+    return roots
+
+
+def _find_installed_binaries(binary_names: list[str]) -> list[Path]:
+    """Find installed binaries in the scripts directory."""
+    scripts_dir = Path(sysconfig.get_path("scripts"))
+    binaries: list[Path] = []
+    for name in binary_names:
+        binary_path = scripts_dir / name
+        if not binary_path.exists():
+            binary_path = scripts_dir / f"{name}.exe"
+        if binary_path.exists():
+            binaries.append(binary_path)
+    return binaries
 
 
 def _find_extension_module(dir_path: Path, module_name: str, *, require: bool = False) -> Path | None:
@@ -510,6 +540,7 @@ class DefaultProjectFileSearcher(ProjectFileSearcher):
         ".so",
         ".py",
         ".pyc",
+        ".pyi",  # generated stub files from `maturin --generate-stubs`
     }
 
     def __init__(
@@ -549,14 +580,15 @@ class DefaultProjectFileSearcher(ProjectFileSearcher):
         self,
         project_dir: Path,
         all_path_dependencies: list[Path],
-        installed_package_root: Path,
+        installed_package_roots: list[Path],
     ) -> Iterator[Path]:
         excluded_dirs = set()
         excluded_files = set()
-        if installed_package_root.is_dir():
-            excluded_dirs.add(installed_package_root)
-        else:
-            excluded_files.add(installed_package_root)
+        for root in installed_package_roots:
+            if root.is_dir():
+                excluded_dirs.add(root)
+            else:
+                excluded_files.add(root)
 
         for root_dir in itertools.chain((project_dir,), all_path_dependencies):
             for path in self.get_files_in_dir(
@@ -569,13 +601,12 @@ class DefaultProjectFileSearcher(ProjectFileSearcher):
                 if path not in excluded_files:
                     yield path
 
-    def get_installation_paths(self, installed_package_root: Path) -> Iterator[Path]:
-        if installed_package_root.is_dir():
-            yield from self.get_files_in_dir(installed_package_root, set(), {"__pycache__"}, set(), {".pyc"})
-        elif installed_package_root.is_file():
-            yield installed_package_root
-        else:
-            return
+    def get_installation_paths(self, installed_package_roots: list[Path]) -> Iterator[Path]:
+        for root in installed_package_roots:
+            if root.is_dir():
+                yield from self.get_files_in_dir(root, set(), {"__pycache__"}, set(), {".pyc"})
+            elif root.is_file():
+                yield root
 
     def get_files_in_dir(
         self,
