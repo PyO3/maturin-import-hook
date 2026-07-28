@@ -38,6 +38,7 @@ class BuildStatus:
     source_path: Path
     maturin_args: list[str]
     maturin_output: str
+    installation_mtime: float | None = None
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -45,6 +46,7 @@ class BuildStatus:
             "source_path": str(self.source_path),
             "maturin_args": self.maturin_args,
             "maturin_output": self.maturin_output,
+            "installation_mtime": self.installation_mtime,
         }
 
     @staticmethod
@@ -55,6 +57,7 @@ class BuildStatus:
                 source_path=Path(json_data["source_path"]),
                 maturin_args=json_data["maturin_args"],
                 maturin_output=json_data["maturin_output"],
+                installation_mtime=json_data.get("installation_mtime"),
             )
         except KeyError:
             logger.debug("failed to parse BuildStatus from %s", json_data)
@@ -301,7 +304,10 @@ def get_installation_freshness(
     if debug_enabled:
         logger.debug("oldest installed file: %s (at %f)", oldest_installed_path, installation_mtime)
 
-    if abs(build_status.build_mtime - installation_mtime) > 5e-3:
+    expected_installation_mtime = (
+        build_status.installation_mtime if build_status.installation_mtime is not None else build_status.build_mtime
+    )
+    if abs(expected_installation_mtime - installation_mtime) > 5e-3:
         return Freshness(False, "installation mtime does not match build status mtime", oldest_installed_path, None)
 
     try:
@@ -320,12 +326,12 @@ def get_installation_freshness(
     if debug_enabled:
         logger.debug("newest source file: %s (at %f)", newest_source_path, source_mtime)
 
-    if installation_mtime == source_mtime:
+    if build_status.build_mtime == source_mtime:
         # writes made in quick succession often result in exactly identical mtimes because the resolution of the mtime
         # timer is not always very high (eg 3ms on a sample Linux machine in tmpfs and ext4). Some filesystems only have
         # resolution of ~1 second so this edge case is worth considering.
         return Freshness(False, "installation may be out of date", oldest_installed_path, newest_source_path)
-    elif installation_mtime < source_mtime:
+    elif build_status.build_mtime < source_mtime:
         return Freshness(False, "installation is out of date", oldest_installed_path, newest_source_path)
     else:
         return Freshness(True, "", oldest_installed_path, newest_source_path)

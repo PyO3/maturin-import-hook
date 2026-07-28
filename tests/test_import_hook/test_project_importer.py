@@ -526,6 +526,51 @@ def test_rebuild_on_settings_change(workspace: Path, is_mixed: bool) -> None:
     assert "SUCCESS" in output4
 
 
+@pytest.mark.parametrize("reset_build_timestamp", [None, False])
+def test_successful_noop_build_resets_build_timestamp(workspace: Path, reset_build_timestamp: bool | None) -> None:
+    project_name = "my-project"
+    _uninstall(project_name)
+    project_dir = _create_project_from_blank_template(project_name, workspace / project_name, mixed=False)
+    _install_editable(project_dir)
+
+    unchanged_installation = workspace / "unchanged-installation"
+    unchanged_installation.touch()
+    reset_argument = "" if reset_build_timestamp is None else f", reset_build_timestamp={reset_build_timestamp}"
+    check_installed = dedent(f"""\
+        import logging
+        from pathlib import Path
+
+        import maturin_import_hook
+        from maturin_import_hook.project_importer import DefaultProjectFileSearcher
+
+        class NoopBuildFileSearcher(DefaultProjectFileSearcher):
+            def get_installation_paths(self, installed_package_roots):
+                yield Path({str(unchanged_installation)!r})
+
+        logging.basicConfig(format='%(name)s [%(levelname)s] %(message)s', level=logging.DEBUG)
+        maturin_import_hook.reset_logger()
+        maturin_import_hook.install(file_searcher=NoopBuildFileSearcher(){reset_argument})
+
+        import my_project
+        """)
+
+    output1, _ = run_python_code(check_installed)
+    assert _rebuilt_message(project_name) in output1
+
+    (project_dir / "pyproject.toml").touch()
+
+    output2, _ = run_python_code(check_installed)
+    assert _rebuilt_message(project_name) in output2
+
+    output3, _ = run_python_code(check_installed)
+    if reset_build_timestamp is None:
+        assert _rebuilt_message(project_name) not in output3
+        assert _up_to_date_message(project_name) in output3
+    else:
+        assert _rebuilt_message(project_name) in output3
+        assert _up_to_date_message(project_name) not in output3
+
+
 def test_low_resolution_mtime(workspace: Path) -> None:
     """see test_rust_file_importer.test_low_resolution_mtime"""
     # managing the times manually with this timer file ensures that cargo does not do any unwanted caching of its own
@@ -567,7 +612,7 @@ def test_low_resolution_mtime(workspace: Path) -> None:
 
     output2, _ = run_python([str(helper_path)], cwd=workspace)
     assert 'building "my_project"' in output2
-    assert 'package "my_project" will be rebuilt because: installation may be out of date' in output2
+    assert 'package "my_project" will be rebuilt because: installation is out of date' in output2
     assert "get_num = 20" in output2
     assert "SUCCESS" in output2
 
@@ -576,7 +621,7 @@ def test_low_resolution_mtime(workspace: Path) -> None:
 
     output3, _ = run_python([str(helper_path)], cwd=workspace)
     assert 'building "my_project"' in output3
-    assert 'package "my_project" will be rebuilt because: installation may be out of date' in output3
+    assert 'package "my_project" will be rebuilt because: installation is out of date' in output3
     assert "get_num = 20" in output3
     assert "SUCCESS" in output3
 
@@ -1362,6 +1407,25 @@ class TestDefaultProjectFileSearcher:
             )
             paths = set(s.get_source_paths(project_dir, [], [extension_path]))
             assert paths == {project_dir / "source"}
+
+        def test_installed_debug_info_is_not_source(self, workspace: Path) -> None:
+            extension_path = workspace / "extension.cp313-win_amd64.pyd"
+            extension_path.touch()
+            (workspace / "extension.pdb").touch()
+            (workspace / "libextension.dwp").touch()
+            dsym_path = workspace / "extension.so.dSYM"
+            dsym_path.mkdir()
+            (dsym_path / "extension").touch()
+            source_path = workspace / "other.pdb"
+            source_path.touch()
+
+            s = DefaultProjectFileSearcher(
+                source_excluded_dir_names=set(),
+                source_excluded_dir_markers=set(),
+                source_excluded_file_extensions=set(),
+            )
+            paths = set(s.get_source_paths(workspace, [], [extension_path]))
+            assert paths == {source_path}
 
     def test_get_installation_paths(self, workspace: Path) -> None:
         s = DefaultProjectFileSearcher(

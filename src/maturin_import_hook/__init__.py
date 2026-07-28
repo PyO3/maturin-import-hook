@@ -16,6 +16,7 @@ def install(
     settings: MaturinSettings | None = None,
     build_dir: Path | None = None,
     force_rebuild: bool = False,
+    reset_build_timestamp: bool = True,
     lock_timeout_seconds: float | None = 120,
     show_warnings: bool = True,
     file_searcher: project_importer.ProjectFileSearcher | None = None,
@@ -34,6 +35,8 @@ def install(
             `sys.exec_prefix / 'maturin_build_cache'` or
             `$HOME/.cache/maturin_build_cache/<interpreter_hash>` in order of preference
         force_rebuild: whether to always rebuild and skip checking whether anything has changed
+        reset_build_timestamp: whether a successful project build should reset the cached logical build timestamp
+            even when maturin did not update the installed files
         lock_timeout_seconds: a lock is required to prevent projects from being built concurrently.
             If the lock is not released before this timeout is reached the import hook stops waiting and aborts.
             A value of None means that the import hook will wait for the lock indefinitely.
@@ -63,6 +66,7 @@ def install(
             build_dir=build_dir,
             enable_reloading=enable_reloading,
             force_rebuild=force_rebuild,
+            reset_build_timestamp=reset_build_timestamp,
             lock_timeout_seconds=lock_timeout_seconds,
             show_warnings=show_warnings,
             file_searcher=file_searcher,

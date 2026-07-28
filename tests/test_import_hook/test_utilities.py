@@ -283,6 +283,35 @@ class TestGetInstallationFreshness:
             False, "installation may be out of date", tmp_path / "install", tmp_path / "source"
         )
 
+    def test_successful_noop_build_resets_source_freshness(self, tmp_path: Path) -> None:
+        source = tmp_path / "source"
+        install = tmp_path / "install"
+        source.touch()
+        install.touch()
+        _set_strictly_ordered_mtimes([install, source])
+
+        installation_mtime = install.stat().st_mtime
+        source_mtime = source.stat().st_mtime
+        status = BuildStatus(
+            build_mtime=source_mtime + 1,
+            installation_mtime=installation_mtime,
+            source_path=Path("/"),
+            maturin_args=[],
+            maturin_output="",
+        )
+
+        freshness = get_installation_freshness([source], [install], status)
+        assert freshness == Freshness(True, "", install, source)
+
+        set_file_times(install, (install.stat().st_atime, installation_mtime + 1))
+        freshness = get_installation_freshness([source], [install], status)
+        assert freshness == Freshness(False, "installation mtime does not match build status mtime", install, None)
+
+        set_file_times(install, (install.stat().st_atime, installation_mtime))
+        set_file_times(source, (source.stat().st_atime, status.build_mtime + 1))
+        freshness = get_installation_freshness([source], [install], status)
+        assert freshness == Freshness(False, "installation is out of date", install, source)
+
     def test_simple_cases(self, tmp_path: Path) -> None:
         source_1 = tmp_path / "source_1"
         source_2 = tmp_path / "source_2"
@@ -405,9 +434,17 @@ def test_build_cache(tmp_path: Path) -> None:
         assert locked_cache.get_build_status(tmp_path / "source2") == status2
         assert locked_cache.get_build_status(tmp_path / "source3") is None
 
-        status1b = BuildStatus(1.3, tmp_path / "source1", ["arg1b"], "output1b")
+        status1b = BuildStatus(1.3, tmp_path / "source1", ["arg1b"], "output1b", installation_mtime=1.1)
         locked_cache.store_build_status(status1b)
         assert locked_cache.get_build_status(tmp_path / "source1") == status1b
+
+    legacy_status = BuildStatus.from_json({
+        "build_mtime": 1.2,
+        "source_path": str(tmp_path / "legacy_source"),
+        "maturin_args": ["legacy_arg"],
+        "maturin_output": "legacy_output",
+    })
+    assert legacy_status == BuildStatus(1.2, tmp_path / "legacy_source", ["legacy_arg"], "legacy_output")
 
 
 def test_uri_to_path() -> None:
