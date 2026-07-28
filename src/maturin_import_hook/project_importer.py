@@ -83,6 +83,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
         enable_reloading: bool = True,
         enable_automatic_installation: bool = False,
         force_rebuild: bool = False,
+        reset_build_timestamp: bool = True,
         show_warnings: bool = True,
     ) -> None:
         self._resolver = ProjectResolver()
@@ -92,6 +93,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
         self._enable_reloading = enable_reloading
         self._enable_automatic_installation = enable_automatic_installation
         self._force_rebuild = force_rebuild
+        self._reset_build_timestamp = reset_build_timestamp
         self._show_warnings = show_warnings
         self._maturin_path: Path | None = None
         self._reload_tmp_path = LazySessionTemporaryDirectory(prefix=type(self).__name__)
@@ -263,6 +265,7 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
             logger.debug('package "%s" will be rebuilt because: %s', package_name, reason)
 
             logger.info('building "%s"', package_name)
+            build_started_at = time.time()
             start = time.perf_counter()
             maturin_output = develop_build_project(self.find_maturin(), resolved.cargo_manifest_path, settings)
             logger.debug(
@@ -288,7 +291,15 @@ class MaturinProjectImporter(importlib.abc.MetaPathFinder):
                 if mtime is None:
                     logger.error("could not get installed package mtime")
                 else:
-                    build_status = BuildStatus(mtime, project_dir, settings.to_args("develop"), maturin_output)
+                    build_mtime = build_started_at if self._reset_build_timestamp else mtime
+                    installation_mtime = mtime if self._reset_build_timestamp else None
+                    build_status = BuildStatus(
+                        build_mtime,
+                        project_dir,
+                        settings.to_args("develop"),
+                        maturin_output,
+                        installation_mtime,
+                    )
                     build_cache.store_build_status(build_status)
 
         return spec, True
@@ -542,6 +553,7 @@ class DefaultProjectFileSearcher(ProjectFileSearcher):
         ".pyc",
         ".pyi",  # generated stub files from `maturin --generate-stubs`
     }
+    _DEBUG_INFO_EXTENSIONS: ClassVar[set[str]] = {".dsym", ".dwp", ".pdb"}
 
     def __init__(
         self,
@@ -589,6 +601,12 @@ class DefaultProjectFileSearcher(ProjectFileSearcher):
                 excluded_dirs.add(root)
             else:
                 excluded_files.add(root)
+                if root.is_file():
+                    for debug_info_path in self._get_installed_debug_info_paths(root):
+                        if debug_info_path.is_dir():
+                            excluded_dirs.add(debug_info_path)
+                        else:
+                            excluded_files.add(debug_info_path)
 
         for root_dir in itertools.chain((project_dir,), all_path_dependencies):
             for path in self.get_files_in_dir(
@@ -600,6 +618,17 @@ class DefaultProjectFileSearcher(ProjectFileSearcher):
             ):
                 if path not in excluded_files:
                     yield path
+
+    @classmethod
+    def _get_installed_debug_info_paths(cls, extension_path: Path) -> Iterator[Path]:
+        """Find debug artifacts that maturin installs beside a mixed-project extension module."""
+        module_name = extension_path.name.partition(".")[0].casefold()
+        expected_prefixes = (f"{module_name}.", f"lib{module_name}.")
+        for path in extension_path.parent.iterdir():
+            if path.suffix.casefold() in cls._DEBUG_INFO_EXTENSIONS and path.name.casefold().startswith(
+                expected_prefixes
+            ):
+                yield path
 
     def get_installation_paths(self, installed_package_roots: list[Path]) -> Iterator[Path]:
         for root in installed_package_roots:
@@ -645,6 +674,7 @@ def install(
     build_dir: Path | None = None,
     enable_reloading: bool = True,
     force_rebuild: bool = False,
+    reset_build_timestamp: bool = True,
     lock_timeout_seconds: float | None = 120,
     show_warnings: bool = True,
     file_searcher: ProjectFileSearcher | None = None,
@@ -659,6 +689,8 @@ def install(
             `$HOME/.cache/maturin_build_cache/<interpreter_hash>` in order of preference.
         enable_reloading: enable workarounds to allow the extension modules to be reloaded with `importlib.reload()`
         force_rebuild: whether to always rebuild and skip checking whether anything has changed
+        reset_build_timestamp: whether a successful project build should reset the cached logical build timestamp
+            even when maturin did not update the installed files
         excluded_dir_names: directory names to exclude when determining whether a project has changed
             and so whether the extension module needs to be rebuilt
         lock_timeout_seconds: a lock is required to prevent projects from being built concurrently.
@@ -678,6 +710,7 @@ def install(
         build_dir=build_dir,
         enable_reloading=enable_reloading,
         force_rebuild=force_rebuild,
+        reset_build_timestamp=reset_build_timestamp,
         lock_timeout_seconds=lock_timeout_seconds,
         show_warnings=show_warnings,
         file_searcher=file_searcher,
