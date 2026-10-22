@@ -12,7 +12,7 @@ on:
         options:
         - all
         - ubuntu-latest
-        - macos-14
+        - macos-15
         - windows-latest
       python_version:
         type: choice
@@ -53,7 +53,7 @@ jobs:
     env:
       OS_MATRIX: |
         - ubuntu-latest
-        - macos-14
+        - macos-15
         - windows-latest
       PYTHON_VERSION: |
         - '3.11'
@@ -81,7 +81,7 @@ jobs:
             let all_platforms = [];
             ALL_OS.forEach(os => {
               ALL_PYTHON_VERSIONS.forEach(python_version => {
-                if (os === "macos-14") {
+                if (os === "macos-15") {
                   if (python_version.startsWith("pypy")) {
                     return;  // PyPy is only built for x64
                   } else if (parseInt(python_version.slice(2)) < 11) {
